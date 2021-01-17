@@ -29,8 +29,6 @@ type IPSpec struct {
 
 // IPStatus defines the observed state of IP
 type IPStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 // +kubebuilder:object:root=true
