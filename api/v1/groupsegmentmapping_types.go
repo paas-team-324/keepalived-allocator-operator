@@ -25,11 +25,18 @@ import (
 
 // GroupSegmentMappingSpec defines the desired state of GroupSegmentMapping
 type GroupSegmentMappingSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of GroupSegmentMapping. Edit GroupSegmentMapping_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +kubebuilder:validation:Required
+	// Name of the matching KeepalivedGroup object
+	KeepalivedGroup string `json:"keepalivedGroup,omitempty"`
+
+	// +kubebuilder:validation:Required
+	// Segment in which to allocate the IP address
+	Segment string `json:"segment,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// Exclude the following IPs from the specified segment
+	ExcludedIPs []string `json:"excludedIPs,omitempty"`
 }
 
 // GroupSegmentMappingStatus defines the observed state of GroupSegmentMapping
