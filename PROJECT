@@ -1,4 +1,4 @@
-domain: paas.il
+domain: org
 layout: go.kubebuilder.io/v3
 projectName: empty
 repo: github.com/vlad-pbr/keepalived-allocator-operator
