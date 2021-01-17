@@ -2,6 +2,11 @@ domain: org
 layout: go.kubebuilder.io/v3
 projectName: empty
 repo: github.com/vlad-pbr/keepalived-allocator-operator
+resources:
+- crdVersion: v1
+  group: paas
+  kind: VirtualIP
+  version: v1
 version: 3-alpha
 plugins:
   manifests.sdk.operatorframework.io/v2: {}

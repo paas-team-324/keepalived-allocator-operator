@@ -1,0 +1,7 @@
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: virtualip-sample
+spec:
+  # Add fields here
+  foo: bar
