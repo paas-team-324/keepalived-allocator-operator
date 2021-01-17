@@ -28,8 +28,18 @@ type VirtualIPSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of VirtualIP. Edit VirtualIP_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// +kubebuilder:validation:Required
+	// Name of the service to be exposed
+	Service string `json:"service"`
+
+	// +kubebuilder:validation:Optional
+	// Segment in which to allocate the IP address
+	Segment string `json:"segment,omitempty"`
+
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default:=false
+	// Whether to clone the service or not
+	Clone bool `json:"clone"`
 }
 
 // VirtualIPStatus defines the observed state of VirtualIP
