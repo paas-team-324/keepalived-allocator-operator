@@ -37,9 +37,16 @@ spec:
           spec:
             description: GroupSegmentMappingSpec defines the desired state of GroupSegmentMapping
             properties:
-              foo:
-                description: Foo is an example field of GroupSegmentMapping. Edit
-                  GroupSegmentMapping_types.go to remove/update
+              excludedIPs:
+                description: Exclude the following IPs from the specified segment
+                items:
+                  type: string
+                type: array
+              keepalivedGroup:
+                description: Name of the matching KeepalivedGroup object
+                type: string
+              segment:
+                description: Segment in which to allocate the IP address
                 type: string
             type: object
           status:

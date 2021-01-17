@@ -35,10 +35,6 @@ spec:
             type: object
           spec:
             description: IPSpec defines the desired state of IP
-            properties:
-              foo:
-                description: Foo is an example field of IP. Edit IP_types.go to remove/update
-                type: string
             type: object
           status:
             description: IPStatus defines the observed state of IP
