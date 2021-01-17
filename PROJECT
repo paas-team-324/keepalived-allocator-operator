@@ -11,6 +11,10 @@ resources:
   group: paas
   kind: IP
   version: v1
+- crdVersion: v1
+  group: paas
+  kind: GroupSegmentMapping
+  version: v1
 version: 3-alpha
 plugins:
   manifests.sdk.operatorframework.io/v2: {}

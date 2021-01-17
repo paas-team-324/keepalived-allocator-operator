@@ -2,4 +2,5 @@
 resources:
 - paas_v1_virtualip.yaml
 - paas_v1_ip.yaml
+- paas_v1_groupsegmentmapping.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

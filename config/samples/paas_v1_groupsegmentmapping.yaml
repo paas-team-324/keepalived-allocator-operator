@@ -1,0 +1,7 @@
+apiVersion: paas.org/v1
+kind: GroupSegmentMapping
+metadata:
+  name: groupsegmentmapping-sample
+spec:
+  # Add fields here
+  foo: bar
