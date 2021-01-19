@@ -311,6 +311,69 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// initialize variables
 	deleteVIP := !virtualIP.DeletionTimestamp.IsZero()
 	ipFinalizer := "ip.finalizers.virtualips.paas.org"
+	serviceFinalizer := "service.finalizers.virtualips.paas.org"
+
+	// get service
+	service, err := r.getService(virtualIP)
+	if err != nil {
+		return r.finishReconciliation(virtualIP, err)
+	}
+
+	// check if should clone
+	if virtualIP.Status.Clone == nil {
+		virtualIP.Status.Clone = &virtualIP.Spec.Clone
+	}
+
+	// clone if specified
+	if *virtualIP.Status.Clone {
+		service, err = r.cloneService(virtualIP, service)
+		if err != nil {
+			message := fmt.Sprintf("received error while cloning service: %v", err)
+			virtualIP.Status.Message = message
+			return r.finishReconciliation(virtualIP, errors.New(message))
+		}
+	}
+
+	// patch and create/update
+	_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, service, func() error {
+		r.patchService(service, virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, deleteVIP)
+		return nil
+	})
+	if err != nil {
+		virtualIP.Status.Message = "failed to create/update the service"
+		r.finishReconciliation(virtualIP, err)
+	}
+
+	// if deleting object and service finalizer is present
+	if deleteVIP && controllerutil.ContainsFinalizer(virtualIP, serviceFinalizer) {
+
+		// delete clone
+		if *virtualIP.Status.Clone {
+
+			if err := r.Delete(context.Background(), &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      virtualIP.Status.Service,
+					Namespace: virtualIP.Namespace,
+				},
+			}); err != nil {
+				return r.finishReconciliation(virtualIP, err)
+			}
+		}
+
+		// remove service finalizer
+		controllerutil.RemoveFinalizer(virtualIP, serviceFinalizer)
+
+		// update finalizers list
+		if err := r.Update(context.Background(), virtualIP); err != nil {
+			return r.finishReconciliation(virtualIP, err)
+		}
+
+		// do not requeue
+		return ctrl.Result{
+			RequeueAfter: 0,
+		}, nil
+
+	}
 
 	// delete IP object for the current VIP
 	if deleteVIP {
@@ -353,69 +416,6 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 			controllerutil.AddFinalizer(virtualIP, ipFinalizer)
 		}
-	}
-
-	// service finalizer
-	serviceFinalizer := "service.finalizers.virtualips.paas.org"
-
-	// get service
-	service, err := r.getService(virtualIP)
-	if err != nil {
-		return r.finishReconciliation(virtualIP, err)
-	}
-
-	// check if should clone
-	if virtualIP.Status.Clone == nil {
-		virtualIP.Status.Clone = &virtualIP.Spec.Clone
-	}
-
-	// clone if specified
-	if *virtualIP.Status.Clone {
-		service, err = r.cloneService(virtualIP, service)
-		if err != nil {
-			message := fmt.Sprintf("received error while cloning service: %v", err)
-			virtualIP.Status.Message = message
-			return r.finishReconciliation(virtualIP, errors.New(message))
-		}
-	}
-
-	// patch and create/update
-	r.patchService(service, virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, deleteVIP)
-	_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, service, func() error { return nil })
-	if err != nil {
-		virtualIP.Status.Message = "failed to create/update the service"
-		r.finishReconciliation(virtualIP, err)
-	}
-
-	// if deleting object and service finalizer is present
-	if deleteVIP && controllerutil.ContainsFinalizer(virtualIP, serviceFinalizer) {
-
-		// delete clone
-		if *virtualIP.Status.Clone {
-
-			if err := r.Delete(context.Background(), &corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      virtualIP.Status.Service,
-					Namespace: virtualIP.Namespace,
-				},
-			}); err != nil {
-				return r.finishReconciliation(virtualIP, err)
-			}
-		}
-
-		// remove service finalizerk
-		controllerutil.RemoveFinalizer(virtualIP, serviceFinalizer)
-
-		// update finalizers list
-		if err := r.Update(context.Background(), virtualIP); err != nil {
-			return r.finishReconciliation(virtualIP, err)
-		}
-
-		// do not requeue
-		return ctrl.Result{
-			RequeueAfter: 0,
-		}, nil
-
 	}
 
 	// update object finalizers
