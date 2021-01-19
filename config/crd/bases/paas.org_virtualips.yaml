@@ -54,7 +54,13 @@ spec:
             properties:
               IP:
                 type: string
+              clone:
+                type: boolean
+              keepalivedGroup:
+                type: string
               message:
+                type: string
+              service:
                 type: string
               state:
                 type: string

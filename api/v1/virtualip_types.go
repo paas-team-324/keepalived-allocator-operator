@@ -58,6 +58,8 @@ type VirtualIPStatus struct {
 	IP              string         `json:"IP,omitempty"`
 	KeepalivedGroup string         `json:"keepalivedGroup,omitempty"`
 	State           VirtualIPState `json:"state,omitempty"`
+	Service         string         `json:"service,omitempty"`
+	Clone           *bool          `json:"clone,omitempty"`
 }
 
 // +kubebuilder:object:root=true
