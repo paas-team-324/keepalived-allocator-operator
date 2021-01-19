@@ -305,7 +305,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	virtualIP := &paasv1.VirtualIP{}
 	err := r.Client.Get(context.Background(), req.NamespacedName, virtualIP)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	// initialize variables
