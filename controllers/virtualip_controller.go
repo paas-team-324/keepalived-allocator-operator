@@ -215,11 +215,10 @@ func (r *VirtualIPReconciler) getGSMBySegment(segment string) (*paasv1.GroupSegm
 	return nil, err
 }
 
-func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, string, string, error) {
+func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, string, error) {
 
 	var ip string
 	var keepalivedGroup string
-	var segment string
 
 	// allocate IP from given segment
 	if virtualIP.Spec.Segment != "" {
@@ -227,18 +226,17 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 		// find matching GSM
 		gsm, err := r.getGSMBySegment(virtualIP.Spec.Segment)
 		if err != nil {
-			return "", "", "", err
+			return "", "", err
 		}
 
 		// reserve IP from given GSM
 		ip, err = r.reserveIP(gsm)
 		if err != nil {
-			return "", "", "", err
+			return "", "", err
 		}
 
 		// store keepalived group info
 		keepalivedGroup = gsm.Spec.KeepalivedGroup
-		segment = gsm.Spec.Segment
 
 		// allocate any available IP address
 	} else {
@@ -246,7 +244,7 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 		// get all GSMs
 		gsms, err := r.getGSMs()
 		if err != nil {
-			return "", "", "", err
+			return "", "", err
 		}
 
 		// iterate over all GSMs
@@ -255,13 +253,12 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 			// try reserving IP from given GSM
 			ip, err = r.reserveIP(&gsm)
 			if err != nil {
-				return "", "", "", nil
+				return "", "", nil
 			}
 
 			// store keepalived group info
 			if ip != "" {
 				keepalivedGroup = gsm.Spec.KeepalivedGroup
-				segment = gsm.Spec.Segment
 				break
 			}
 		}
@@ -270,10 +267,10 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 	// make sure that we received a valid IP address
 	if ip == "" {
 		virtualIP.Status.Message = "No IP could be allocated"
-		return "", "", "", errors.New("No IP could be allocated")
+		return "", "", errors.New("No IP could be allocated")
 	}
 
-	return ip, keepalivedGroup, segment, nil
+	return ip, keepalivedGroup, nil
 }
 
 // +kubebuilder:rbac:groups=paas.org,resources=virtualips,verbs=get;list;watch;create;update;patch;delete
@@ -293,7 +290,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	_ = r.Log.WithValues("virtualip", req.NamespacedName)
 
 	// get current VIP from cluster
-	var ip, keepalivedGroup, segment string
+	var ip, keepalivedGroup string
 	virtualIP := &paasv1.VirtualIP{}
 	err := r.Client.Get(context.Background(), req.NamespacedName, virtualIP)
 	if err != nil {
@@ -302,7 +299,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// allocate a new IP address if not present
 	if virtualIP.Status.IP == "" {
-		ip, keepalivedGroup, segment, err = r.allocateIP(virtualIP)
+		ip, keepalivedGroup, err = r.allocateIP(virtualIP)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -310,13 +307,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		// retrieve IP from status
 	} else {
 		ip = virtualIP.Status.IP
-		segment = virtualIP.Status.Segment
-		gsm, err := r.getGSMBySegment(segment)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-
-		keepalivedGroup = gsm.Spec.KeepalivedGroup
+		keepalivedGroup = virtualIP.Status.KeepalivedGroup
 	}
 
 	// get service to be exposed by external IP
@@ -338,7 +329,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	virtualIP.Status.State = paasv1.SUCCEEDED
 	virtualIP.Status.Message = "Successfully allocated an IP address"
 	virtualIP.Status.IP = ip
-	virtualIP.Status.Segment = segment
+	virtualIP.Status.KeepalivedGroup = keepalivedGroup
 	err = r.Status().Update(context.Background(), virtualIP)
 	if err != nil {
 		return ctrl.Result{}, err

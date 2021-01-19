@@ -54,10 +54,10 @@ const (
 
 // VirtualIPStatus defines the observed state of VirtualIP
 type VirtualIPStatus struct {
-	Message string         `json:"message,omitempty"`
-	IP      string         `json:"IP,omitempty"`
-	Segment string         `json:"segment,omitempty"`
-	State   VirtualIPState `json:"state,omitempty"`
+	Message         string         `json:"message,omitempty"`
+	IP              string         `json:"IP,omitempty"`
+	KeepalivedGroup string         `json:"keepalivedGroup,omitempty"`
+	State           VirtualIPState `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true
