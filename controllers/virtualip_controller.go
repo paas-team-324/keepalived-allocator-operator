@@ -47,18 +47,15 @@ var keepalivedGroupNamespace = "keepalived-operator"
 func (r *VirtualIPReconciler) getService(virtualIP *paasv1.VirtualIP) (*corev1.Service, error) {
 
 	// decide on a service name
-	var serviceName string
-	if virtualIP.Status.Service != "" {
-		serviceName = virtualIP.Status.Service
-	} else {
-		serviceName = virtualIP.Spec.Service
+	if virtualIP.Status.Service == "" {
+		virtualIP.Status.Service = virtualIP.Spec.Service
 	}
 
 	// get the service
 	service := &corev1.Service{}
 	err := r.Client.Get(context.Background(), client.ObjectKey{
 		Namespace: virtualIP.Namespace,
-		Name:      serviceName,
+		Name:      virtualIP.Status.Service,
 	}, service)
 	if err != nil {
 		message := fmt.Sprintf("received error while getting service: %v", err)
@@ -67,7 +64,6 @@ func (r *VirtualIPReconciler) getService(virtualIP *paasv1.VirtualIP) (*corev1.S
 	}
 
 	// return service
-	virtualIP.Status.Service = serviceName
 	return service, nil
 }
 
@@ -370,7 +366,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// check if should clone
 	if virtualIP.Status.Clone == nil {
-		(*virtualIP.Status.Clone) = virtualIP.Spec.Clone
+		virtualIP.Status.Clone = &virtualIP.Spec.Clone
 	}
 
 	// clone if specified
@@ -407,7 +403,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 		}
 
-		// remove service finalizer
+		// remove service finalizerk
 		controllerutil.RemoveFinalizer(virtualIP, serviceFinalizer)
 
 		// update finalizers list
@@ -422,10 +418,14 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	}
 
+	// update object finalizers
+	if err := r.Update(context.Background(), virtualIP); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// update VIP status
 	virtualIP.Status.State = paasv1.SUCCEEDED
 	virtualIP.Status.Message = "Successfully allocated an IP address"
-	virtualIP.Status.Service = service.Name
 
 	return r.finishReconciliation(virtualIP, nil)
 }
