@@ -53,7 +53,9 @@ func (r *VirtualIPReconciler) getExposedService(virtualIP *paasv1.VirtualIP) (*c
 		Name:      virtualIP.Spec.Service,
 	}, clone)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("received error while getting service: %v", err))
+		message := fmt.Sprintf("received error while getting service: %v", err)
+		virtualIP.Status.Message = message
+		return nil, errors.New(message)
 	}
 
 	// no need to clone - return the service itself
@@ -64,7 +66,9 @@ func (r *VirtualIPReconciler) getExposedService(virtualIP *paasv1.VirtualIP) (*c
 	// clone the service and return it
 	clone, err = r.cloneService(virtualIP, clone)
 	if err != nil {
-		return nil, err
+		message := fmt.Sprintf("received error while cloning service: %v", err)
+		virtualIP.Status.Message = message
+		return nil, errors.New(message)
 	}
 
 	return clone, nil
@@ -226,12 +230,14 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 		// find matching GSM
 		gsm, err := r.getGSMBySegment(virtualIP.Spec.Segment)
 		if err != nil {
+			virtualIP.Status.Message = err.Error()
 			return "", "", err
 		}
 
 		// reserve IP from given GSM
 		ip, err = r.reserveIP(gsm)
 		if err != nil {
+			virtualIP.Status.Message = err.Error()
 			return "", "", err
 		}
 
@@ -244,6 +250,7 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 		// get all GSMs
 		gsms, err := r.getGSMs()
 		if err != nil {
+			virtualIP.Status.Message = "Failed to list GroupSegmentMappings"
 			return "", "", err
 		}
 
@@ -253,6 +260,7 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 			// try reserving IP from given GSM
 			ip, err = r.reserveIP(&gsm)
 			if err != nil {
+				virtualIP.Status.Message = err.Error()
 				return "", "", nil
 			}
 
@@ -273,6 +281,15 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 	return ip, keepalivedGroup, nil
 }
 
+func (r *VirtualIPReconciler) finishReconciliation(virtualIP *paasv1.VirtualIP, e error) (ctrl.Result, error) {
+
+	if err := r.Status().Update(context.Background(), virtualIP); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, e
+}
+
 // +kubebuilder:rbac:groups=paas.org,resources=virtualips,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=paas.org,resources=virtualips/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=paas.org,resources=virtualips/finalizers,verbs=update
@@ -289,8 +306,9 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = r.Log.WithValues("virtualip", req.NamespacedName)
 
-	// get current VIP from cluster
 	var ip, keepalivedGroup string
+
+	// get current VIP from cluster
 	virtualIP := &paasv1.VirtualIP{}
 	err := r.Client.Get(context.Background(), req.NamespacedName, virtualIP)
 	if err != nil {
@@ -301,7 +319,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if virtualIP.Status.IP == "" {
 		ip, keepalivedGroup, err = r.allocateIP(virtualIP)
 		if err != nil {
-			return ctrl.Result{}, err
+			return r.finishReconciliation(virtualIP, err)
 		}
 
 		// retrieve IP from status
@@ -313,7 +331,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// get service to be exposed by external IP
 	service, err := r.getExposedService(virtualIP)
 	if err != nil {
-		return ctrl.Result{}, err
+		return r.finishReconciliation(virtualIP, err)
 	}
 
 	// patch service with relevant keepalived group info
@@ -322,7 +340,8 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// create/update the service
 	_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, service, func() error { return nil })
 	if err != nil {
-		return ctrl.Result{}, err
+		virtualIP.Status.Message = "failed to create/update the service"
+		r.finishReconciliation(virtualIP, err)
 	}
 
 	// update VIP status
@@ -330,12 +349,8 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	virtualIP.Status.Message = "Successfully allocated an IP address"
 	virtualIP.Status.IP = ip
 	virtualIP.Status.KeepalivedGroup = keepalivedGroup
-	err = r.Status().Update(context.Background(), virtualIP)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
 
-	return ctrl.Result{}, nil
+	return r.finishReconciliation(virtualIP, nil)
 }
 
 // SetupWithManager sets up the controller with the Manager.
