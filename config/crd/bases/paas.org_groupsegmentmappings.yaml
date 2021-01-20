@@ -13,10 +13,19 @@ spec:
     kind: GroupSegmentMapping
     listKind: GroupSegmentMappingList
     plural: groupsegmentmappings
+    shortNames:
+    - gsm
     singular: groupsegmentmapping
   scope: Cluster
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.keepalivedGroup
+      name: Keepalived Group
+      type: string
+    - jsonPath: .spec.segment
+      name: Segment
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         description: GroupSegmentMapping is the Schema for the groupsegmentmappings

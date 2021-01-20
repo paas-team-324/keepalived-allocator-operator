@@ -47,7 +47,9 @@ type GroupSegmentMappingStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:resource:shortName=gsm,scope=Cluster
+// +kubebuilder:printcolumn:name="Keepalived Group",type=string,JSONPath=`.spec.keepalivedGroup`
+// +kubebuilder:printcolumn:name="Segment",type=string,JSONPath=`.spec.segment`
 
 // GroupSegmentMapping is the Schema for the groupsegmentmappings API
 type GroupSegmentMapping struct {

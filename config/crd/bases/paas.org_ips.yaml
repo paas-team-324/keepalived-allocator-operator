@@ -16,7 +16,14 @@ spec:
     singular: ip
   scope: Cluster
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.labels.gsm
+      name: GroupSegmentMapping
+      type: string
+    - jsonPath: .metadata.annotations.virtualips\.paas\.il/owner
+      name: Owner
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         description: IP is the Schema for the ips API

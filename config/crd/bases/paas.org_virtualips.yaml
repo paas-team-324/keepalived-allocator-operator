@@ -13,10 +13,19 @@ spec:
     kind: VirtualIP
     listKind: VirtualIPList
     plural: virtualips
+    shortNames:
+    - vip
     singular: virtualip
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .status.service
+      name: Service
+      type: string
+    - jsonPath: .status.IP
+      name: IP
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         description: VirtualIP is the Schema for the virtualips API
