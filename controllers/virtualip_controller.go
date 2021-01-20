@@ -71,6 +71,10 @@ func (r *VirtualIPReconciler) cloneService(virtualIP *paasv1.VirtualIP, clone *c
 
 	// update the new service
 	clone.Name = fmt.Sprintf("%s-keepalived-clone", clone.Name)
+	clone.Spec.ClusterIP = ""
+	clone.ResourceVersion = ""
+
+	// set owner reference
 	clone.OwnerReferences = nil
 	err := controllerutil.SetOwnerReference(virtualIP, clone, r.Scheme)
 	if err != nil {
@@ -100,7 +104,7 @@ func (r *VirtualIPReconciler) patchService(service *corev1.Service, ip string, k
 	}
 }
 
-func (r *VirtualIPReconciler) reserveIP(groupSegmentMapping *paasv1.GroupSegmentMapping) (string, error) {
+func (r *VirtualIPReconciler) reserveIP(groupSegmentMapping *paasv1.GroupSegmentMapping, virtualIP *paasv1.VirtualIP) (string, error) {
 
 	// get list of available IPs within the cluster
 	availableIPs, err := r.getAvailableIPs(groupSegmentMapping)
@@ -116,6 +120,9 @@ func (r *VirtualIPReconciler) reserveIP(groupSegmentMapping *paasv1.GroupSegment
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   ip,
 				Labels: map[string]string{groupSegmentMappingLabel: groupSegmentMapping.Name},
+				Annotations: map[string]string{
+					"virtualips.paas.il/owner": client.ObjectKeyFromObject(virtualIP).String(),
+				},
 			},
 		}
 
@@ -230,7 +237,7 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 		}
 
 		// reserve IP from given GSM
-		ip, err = r.reserveIP(gsm)
+		ip, err = r.reserveIP(gsm, virtualIP)
 		if err != nil {
 			virtualIP.Status.Message = err.Error()
 			return "", "", err
@@ -253,7 +260,7 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 		for _, gsm := range *gsms {
 
 			// try reserving IP from given GSM
-			ip, err = r.reserveIP(&gsm)
+			ip, err = r.reserveIP(&gsm, virtualIP)
 			if err != nil {
 				virtualIP.Status.Message = err.Error()
 				return "", "", nil
@@ -279,10 +286,16 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 func (r *VirtualIPReconciler) finishReconciliation(virtualIP *paasv1.VirtualIP, e error) (ctrl.Result, error) {
 
 	if err := r.Status().Update(context.Background(), virtualIP); err != nil {
+		r.Log.Info("failing at status update")
+		r.Log.Info(err.Error())
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, e
+	if e != nil {
+		r.Log.Error(e, e.Error())
+	}
+
+	return ctrl.Result{}, nil
 }
 
 // +kubebuilder:rbac:groups=paas.org,resources=virtualips,verbs=get;list;watch;create;update;patch;delete
@@ -311,7 +324,6 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// initialize variables
 	deleteVIP := !virtualIP.DeletionTimestamp.IsZero()
 	ipFinalizer := "ip.finalizers.virtualips.paas.org"
-	serviceFinalizer := "service.finalizers.virtualips.paas.org"
 
 	// get service
 	service, err := r.getService(virtualIP)
@@ -334,53 +346,13 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	// patch and create/update
-	_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, service, func() error {
-		r.patchService(service, virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, deleteVIP)
-		return nil
-	})
-	if err != nil {
-		virtualIP.Status.Message = "failed to create/update the service"
-		r.finishReconciliation(virtualIP, err)
-	}
-
-	// if deleting object and service finalizer is present
-	if deleteVIP && controllerutil.ContainsFinalizer(virtualIP, serviceFinalizer) {
-
-		// delete clone
-		if *virtualIP.Status.Clone {
-
-			if err := r.Delete(context.Background(), &corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      virtualIP.Status.Service,
-					Namespace: virtualIP.Namespace,
-				},
-			}); err != nil {
-				return r.finishReconciliation(virtualIP, err)
-			}
-		}
-
-		// remove service finalizer
-		controllerutil.RemoveFinalizer(virtualIP, serviceFinalizer)
-
-		// update finalizers list
-		if err := r.Update(context.Background(), virtualIP); err != nil {
-			return r.finishReconciliation(virtualIP, err)
-		}
-
-		// do not requeue
-		return ctrl.Result{
-			RequeueAfter: 0,
-		}, nil
-
-	}
-
 	// delete IP object for the current VIP
 	if deleteVIP {
 
 		// check IP object finalizer
 		if controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
 
+			// remove IP object from cluster
 			if err := r.Delete(context.Background(), &paasv1.IP{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: virtualIP.Status.IP,
@@ -391,16 +363,6 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 			// remove IP finalizer
 			controllerutil.RemoveFinalizer(virtualIP, ipFinalizer)
-
-			// update finalizers list
-			if err := r.Update(context.Background(), virtualIP); err != nil {
-				return r.finishReconciliation(virtualIP, err)
-			}
-
-			// do not requeue
-			return ctrl.Result{
-				RequeueAfter: 0,
-			}, nil
 
 		}
 
@@ -418,9 +380,19 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	// patch and create/update service
+	_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, service, func() error {
+		r.patchService(service, virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, deleteVIP)
+		return nil
+	})
+	if err != nil {
+		virtualIP.Status.Message = "failed to create/update the service"
+		return r.finishReconciliation(virtualIP, err)
+	}
+
 	// update object finalizers
 	if err := r.Update(context.Background(), virtualIP); err != nil {
-		return ctrl.Result{}, err
+		return r.finishReconciliation(virtualIP, err)
 	}
 
 	// update VIP status
