@@ -287,8 +287,15 @@ func (r *VirtualIPReconciler) finishReconciliation(virtualIP *paasv1.VirtualIP, 
 	}
 
 	if virtualIP.DeletionTimestamp.IsZero() {
-		if err := r.Status().Update(context.Background(), virtualIP); err != nil {
-			r.Log.Info(err.Error())
+
+		recentVirtualIP := &paasv1.VirtualIP{}
+		err := r.Client.Get(context.Background(), client.ObjectKeyFromObject(virtualIP), recentVirtualIP)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		recentVirtualIP.Status = virtualIP.Status
+
+		if err := r.Status().Update(context.Background(), recentVirtualIP); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
