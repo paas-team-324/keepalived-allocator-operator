@@ -1,8 +1,8 @@
 apiVersion: paas.org/v1
 kind: VirtualIP
 metadata:
-  name: virtualip-sample
+  name: virtualip-sample-2
   namespace: default
 spec:
-  service: kubernetes
+  service: kubernetes-keepalived-clone
   clone: true

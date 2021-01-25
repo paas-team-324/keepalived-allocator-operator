@@ -278,14 +278,19 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 func (r *VirtualIPReconciler) finishReconciliation(virtualIP *paasv1.VirtualIP, e error) (ctrl.Result, error) {
 
 	if e != nil {
-		r.Log.Info(e.Error())
+		r.Log.Info(fmt.Sprintf("error: '%v', object: '%+v'", e, virtualIP))
 		virtualIP.Status.Message = e.Error()
+		virtualIP.Status.State = paasv1.StateError
+	} else {
+		virtualIP.Status.Message = "successfully allocated an IP address"
+		virtualIP.Status.State = paasv1.StateValid
 	}
 
-	if err := r.Status().Update(context.Background(), virtualIP); err != nil {
-		r.Log.Info("failing at status update")
-		r.Log.Info(err.Error())
-		return ctrl.Result{}, err
+	if virtualIP.DeletionTimestamp.IsZero() {
+		if err := r.Status().Update(context.Background(), virtualIP); err != nil {
+			r.Log.Info(err.Error())
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -350,16 +355,16 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// ensure object existence
-		ipObject := &paasv1.IP{}
+		ipObject := &paasv1.IP{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: virtualIP.Status.IP,
+			},
+		}
 		_, err := controllerutil.CreateOrUpdate(context.Background(), r.Client, ipObject, func() error {
-			ipObject = &paasv1.IP{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   virtualIP.Status.IP,
-					Labels: map[string]string{groupSegmentMappingLabel: virtualIP.Status.GSM},
-					Annotations: map[string]string{
-						"virtualips.paas.il/owner": client.ObjectKeyFromObject(virtualIP).String(),
-					},
-				},
+
+			ipObject.Labels = map[string]string{groupSegmentMappingLabel: virtualIP.Status.GSM}
+			ipObject.Annotations = map[string]string{
+				"virtualips.paas.il/owner": client.ObjectKeyFromObject(virtualIP).String(),
 			}
 
 			return nil
@@ -367,7 +372,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		// check for errors
 		if err != nil {
-			return r.finishReconciliation(virtualIP, err)
+			return r.finishReconciliation(virtualIP, errors.New(fmt.Sprintf("could not create/update an IP object: %v", err)))
 		}
 
 		// add finalizer for IP object
@@ -411,9 +416,6 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Update(context.Background(), virtualIP); err != nil {
 		return r.finishReconciliation(virtualIP, err)
 	}
-
-	// update VIP status
-	virtualIP.Status.Message = "successfully allocated an IP address"
 
 	return r.finishReconciliation(virtualIP, nil)
 }
