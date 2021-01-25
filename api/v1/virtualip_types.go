@@ -44,22 +44,14 @@ type VirtualIPSpec struct {
 
 type VirtualIPState string
 
-const (
-	SUCCEEDED VirtualIPState = "Succeeded"
-	FAILED    VirtualIPState = "Failed to allocate"
-	RESERVING VirtualIPState = "Reserving IP"
-	CLONING   VirtualIPState = "Cloning service"
-	UPDATING  VirtualIPState = "Updating service"
-)
-
 // VirtualIPStatus defines the observed state of VirtualIP
 type VirtualIPStatus struct {
-	Message         string         `json:"message,omitempty"`
-	IP              string         `json:"IP,omitempty"`
-	KeepalivedGroup string         `json:"keepalivedGroup,omitempty"`
-	State           VirtualIPState `json:"state,omitempty"`
-	Service         string         `json:"service,omitempty"`
-	Clone           *bool          `json:"clone,omitempty"`
+	Message         string `json:"message,omitempty"`
+	IP              string `json:"IP,omitempty"`
+	KeepalivedGroup string `json:"keepalivedGroup,omitempty"`
+	Service         string `json:"service,omitempty"`
+	Clone           *bool  `json:"clone,omitempty"`
+	GSM             string `json:"gsm,omitempty"`
 }
 
 // +kubebuilder:object:root=true
