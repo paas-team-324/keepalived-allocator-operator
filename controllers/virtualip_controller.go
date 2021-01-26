@@ -277,6 +277,7 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 
 func (r *VirtualIPReconciler) finishReconciliation(virtualIP *paasv1.VirtualIP, e error) (ctrl.Result, error) {
 
+	// edit VIP status
 	if e != nil {
 		r.Log.Info(fmt.Sprintf("error: '%v', object: '%+v'", e, virtualIP))
 		virtualIP.Status.Message = e.Error()
@@ -286,17 +287,11 @@ func (r *VirtualIPReconciler) finishReconciliation(virtualIP *paasv1.VirtualIP, 
 		virtualIP.Status.State = paasv1.StateValid
 	}
 
+	// do not update status of a VIP that is being deleted
 	if virtualIP.DeletionTimestamp.IsZero() {
 
-		recentVirtualIP := &paasv1.VirtualIP{}
-		err := r.Client.Get(context.Background(), client.ObjectKeyFromObject(virtualIP), recentVirtualIP)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		recentVirtualIP.Status = virtualIP.Status
-
-		if err := r.Status().Update(context.Background(), recentVirtualIP); err != nil {
-			return ctrl.Result{}, err
+		if err := r.Status().Update(context.Background(), virtualIP); err != nil {
+			return ctrl.Result{}, errors.New(fmt.Sprintf("failed to update VirtualIP status: %v", err))
 		}
 	}
 
@@ -333,7 +328,6 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// delete IP object for the current VIP
 	if deleteVIP {
 
-		// check IP object finalizer
 		if controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
 
 			// remove IP object from cluster
@@ -345,8 +339,11 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return r.finishReconciliation(virtualIP, err)
 			}
 
-			// remove IP finalizer
+			// remove IP finalizer and update
 			controllerutil.RemoveFinalizer(virtualIP, ipFinalizer)
+			if err := r.Update(context.Background(), virtualIP); err != nil {
+				return r.finishReconciliation(virtualIP, err)
+			}
 
 		}
 
@@ -361,7 +358,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 		}
 
-		// ensure object existence
+		// ensure IP object existence
 		ipObject := &paasv1.IP{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: virtualIP.Status.IP,
@@ -383,7 +380,22 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 
 		// add finalizer for IP object
-		controllerutil.AddFinalizer(virtualIP, ipFinalizer)
+		if !controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
+			controllerutil.AddFinalizer(virtualIP, ipFinalizer)
+
+			// update status for the next cycle (should not trigger a new cycle)
+			if err := r.Status().Update(context.Background(), virtualIP); err != nil {
+				return ctrl.Result{}, errors.New(fmt.Sprintf("failed to update VirtualIP status: %v", err))
+			}
+
+			// update object finalizers
+			if err := r.Update(context.Background(), virtualIP); err != nil {
+				return r.finishReconciliation(virtualIP, err)
+			}
+
+			// end reconciliation cycle - the update above will trigger a new cycle
+			return ctrl.Result{}, nil
+		}
 	}
 
 	// decide on a service name
@@ -410,18 +422,18 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	// patch and create/update service
-	_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, service, func() error {
-		r.patchService(service, virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, deleteVIP)
-		return nil
-	})
-	if err != nil {
-		return r.finishReconciliation(virtualIP, errors.New(fmt.Sprintf("failed to create/update the service: %v", err)))
-	}
+	// do not update clone when deleting as it does not exist anymore
+	if !(deleteVIP && *virtualIP.Status.Clone) {
 
-	// update object finalizers
-	if err := r.Update(context.Background(), virtualIP); err != nil {
-		return r.finishReconciliation(virtualIP, err)
+		// patch and create/update service
+		_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, service, func() error {
+			r.patchService(service, virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, deleteVIP)
+			return nil
+		})
+		if err != nil {
+			return r.finishReconciliation(virtualIP, errors.New(fmt.Sprintf("failed to create/update the service: %v", err)))
+		}
+
 	}
 
 	return r.finishReconciliation(virtualIP, nil)
