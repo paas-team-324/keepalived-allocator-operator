@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -42,8 +43,17 @@ type VirtualIPReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// get env variable or fallback if not defined
+func getEnv(key, fallback string) string {
+	value := os.Getenv(key)
+	if len(value) == 0 {
+		return fallback
+	}
+	return value
+}
+
 var groupSegmentMappingLabel = "gsm"
-var keepalivedGroupNamespace = "keepalived-operator"
+var keepalivedGroupNamespace = getEnv("KEEPALIVED_GROUP_NAMESPACE", "keepalived-operator")
 
 func (r *VirtualIPReconciler) getService(virtualIP *paasv1.VirtualIP) (*corev1.Service, error) {
 
