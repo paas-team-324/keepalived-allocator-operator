@@ -45,8 +45,10 @@ type VirtualIPSpec struct {
 type VirtualIPState string
 
 const (
-	StateValid VirtualIPState = "Valid"
-	StateError VirtualIPState = "Error"
+	StateValid      VirtualIPState = "Valid"
+	StateError      VirtualIPState = "Error"
+	StateCreatingIP VirtualIPState = "Creating IP object"
+	StateExposing   VirtualIPState = "Exposing service"
 )
 
 // VirtualIPStatus defines the observed state of VirtualIP

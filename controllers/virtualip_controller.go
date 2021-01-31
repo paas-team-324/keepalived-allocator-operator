@@ -54,7 +54,7 @@ func (r *VirtualIPReconciler) getService(virtualIP *paasv1.VirtualIP) (*corev1.S
 		Name:      virtualIP.Status.Service,
 	}, service)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("received error while getting service: %v", err))
+		return nil, err
 	}
 
 	// return service
@@ -275,16 +275,13 @@ func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, s
 	return ip, keepalivedGroup, gsmName, nil
 }
 
-func (r *VirtualIPReconciler) finishReconciliation(virtualIP *paasv1.VirtualIP, e error) (ctrl.Result, error) {
+func (r *VirtualIPReconciler) updateStatus(virtualIP *paasv1.VirtualIP, logger logr.Logger, e error) (ctrl.Result, error) {
 
-	// edit VIP status
+	// log error if present
 	if e != nil {
-		r.Log.Info(fmt.Sprintf("error: '%v', object: '%+v'", e, virtualIP))
+		logger.Error(e, "")
 		virtualIP.Status.Message = e.Error()
 		virtualIP.Status.State = paasv1.StateError
-	} else {
-		virtualIP.Status.Message = "successfully allocated an IP address"
-		virtualIP.Status.State = paasv1.StateValid
 	}
 
 	// do not update status of a VIP that is being deleted
@@ -312,8 +309,8 @@ func (r *VirtualIPReconciler) finishReconciliation(virtualIP *paasv1.VirtualIP, 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	current := r.Log.WithValues("virtualip", req.NamespacedName)
-	current.Info("reconciling")
+	logger := r.Log.WithValues("virtualip", req.NamespacedName)
+	logger.Info("reconciling")
 
 	// get current VIP from cluster
 	virtualIP := &paasv1.VirtualIP{}
@@ -338,13 +335,13 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 					Name: virtualIP.Status.IP,
 				},
 			}); err != nil {
-				return r.finishReconciliation(virtualIP, err)
+				return r.updateStatus(virtualIP, logger, err)
 			}
 
 			// remove IP finalizer and update
 			controllerutil.RemoveFinalizer(virtualIP, ipFinalizer)
 			if err := r.Update(context.Background(), virtualIP); err != nil {
-				return r.finishReconciliation(virtualIP, err)
+				return r.updateStatus(virtualIP, logger, err)
 			}
 
 			return ctrl.Result{}, nil
@@ -357,15 +354,13 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 			virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, virtualIP.Status.GSM, err = r.allocateIP(virtualIP)
 			if err != nil {
-				return r.finishReconciliation(virtualIP, err)
+				return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not allocate an IP: %v", err)))
 			}
 
 			// update status for the next cycle
-			if err := r.Status().Update(context.Background(), virtualIP); err != nil {
-				return ctrl.Result{}, errors.New(fmt.Sprintf("failed to update VirtualIP status: %v", err))
-			}
-
-			return ctrl.Result{}, nil
+			virtualIP.Status.Message = "creating IP object for the service"
+			virtualIP.Status.State = paasv1.StateCreatingIP
+			return r.updateStatus(virtualIP, logger, nil)
 		}
 
 		// ensure IP object existence
@@ -383,10 +378,8 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 			return nil
 		})
-
-		// check for errors
 		if err != nil {
-			return r.finishReconciliation(virtualIP, errors.New(fmt.Sprintf("could not create/update an IP object: %v", err)))
+			return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not create/update an IP object: %v", err)))
 		}
 
 		// add finalizer for IP object
@@ -395,7 +388,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 			// update object finalizers
 			if err := r.Update(context.Background(), virtualIP); err != nil {
-				return r.finishReconciliation(virtualIP, err)
+				return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not add finalizer for IP object: %v", err)))
 			}
 
 			// end reconciliation cycle - the update above will trigger a new cycle
@@ -403,30 +396,28 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	// decide on a service status
+	// decide on the service status
 	if virtualIP.Status.Service == "" {
 		virtualIP.Status.Service = virtualIP.Spec.Service
 		virtualIP.Status.Clone = &virtualIP.Spec.Clone
 
 		// update status for the next cycle
-		if err := r.Status().Update(context.Background(), virtualIP); err != nil {
-			return ctrl.Result{}, errors.New(fmt.Sprintf("failed to update VirtualIP status: %v", err))
-		}
-
-		return ctrl.Result{}, nil
+		virtualIP.Status.Message = "exposing service with an external IP"
+		virtualIP.Status.State = paasv1.StateExposing
+		return r.updateStatus(virtualIP, logger, nil)
 	}
 
 	// get service
 	service, err := r.getService(virtualIP)
 	if err != nil {
-		return r.finishReconciliation(virtualIP, err)
+		return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not get service to be exposed: %v", err)))
 	}
 
 	// clone if specified
 	if *virtualIP.Status.Clone {
 		service, err = r.cloneService(virtualIP, service)
 		if err != nil {
-			return r.finishReconciliation(virtualIP, errors.New(fmt.Sprintf("received error while cloning service: %v", err)))
+			return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("received error while cloning service: %v", err)))
 		}
 	}
 
@@ -439,7 +430,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return nil
 		})
 		if err != nil {
-			return r.finishReconciliation(virtualIP, errors.New(fmt.Sprintf("failed to create/update the service: %v", err)))
+			return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("failed to create/update the service: %v", err)))
 		}
 
 	}
@@ -455,13 +446,15 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 		// update object finalizers with service finalizer
 		if err := r.Update(context.Background(), virtualIP); err != nil {
-			return r.finishReconciliation(virtualIP, err)
+			return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not add finalizer for service: %v", err)))
 		}
 
 		return ctrl.Result{}, nil
 	}
 
-	return r.finishReconciliation(virtualIP, nil)
+	virtualIP.Status.Message = "successfully allocated an IP address"
+	virtualIP.Status.State = paasv1.StateValid
+	return r.updateStatus(virtualIP, logger, nil)
 }
 
 // SetupWithManager sets up the controller with the Manager.
