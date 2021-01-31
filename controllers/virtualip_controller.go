@@ -98,6 +98,16 @@ func (r *VirtualIPReconciler) patchService(service *corev1.Service, ip string, k
 	}
 }
 
+func (r *VirtualIPReconciler) labelIP(ipObject *paasv1.IP, virtualIP *paasv1.VirtualIP, gsmName string) {
+
+	// set appropriate labels and annotations
+	ipObject.Labels = map[string]string{groupSegmentMappingLabel: gsmName}
+	ipObject.Annotations = map[string]string{
+		"virtualips.paas.il/owner": client.ObjectKeyFromObject(virtualIP).String(),
+	}
+
+}
+
 func (r *VirtualIPReconciler) reserveIP(groupSegmentMapping *paasv1.GroupSegmentMapping, virtualIP *paasv1.VirtualIP) (string, error) {
 
 	// get list of available IPs within the cluster
@@ -109,12 +119,16 @@ func (r *VirtualIPReconciler) reserveIP(groupSegmentMapping *paasv1.GroupSegment
 	// try to reserve an IP until we run out of IPs
 	for _, ip := range availableIPs {
 
-		// try dry creating IP object
-		err := r.Create(context.Background(), &paasv1.IP{
+		// initialize IP object
+		ipObject := &paasv1.IP{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: ip,
 			},
-		}, client.DryRunAll)
+		}
+		r.labelIP(ipObject, virtualIP, groupSegmentMapping.Name)
+
+		// try creating IP object
+		err := r.Create(context.Background(), ipObject)
 
 		// no error - no problem
 		if err == nil {
@@ -122,7 +136,7 @@ func (r *VirtualIPReconciler) reserveIP(groupSegmentMapping *paasv1.GroupSegment
 
 			// if error and it's not AlreadyExists error - report
 		} else if err != nil && !apierrors.IsAlreadyExists(err) {
-			return "", errors.New("an error occurred while allocating IP")
+			return "", errors.New(fmt.Sprintf("an error occurred while allocating IP: %v", err))
 		}
 	}
 
@@ -370,12 +384,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			},
 		}
 		_, err := controllerutil.CreateOrUpdate(context.Background(), r.Client, ipObject, func() error {
-
-			ipObject.Labels = map[string]string{groupSegmentMappingLabel: virtualIP.Status.GSM}
-			ipObject.Annotations = map[string]string{
-				"virtualips.paas.il/owner": client.ObjectKeyFromObject(virtualIP).String(),
-			}
-
+			r.labelIP(ipObject, virtualIP, virtualIP.Status.GSM)
 			return nil
 		})
 		if err != nil {
