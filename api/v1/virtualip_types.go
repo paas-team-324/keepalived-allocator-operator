@@ -45,11 +45,10 @@ type VirtualIPSpec struct {
 type VirtualIPState string
 
 const (
-	SUCCEEDED VirtualIPState = "Succeeded"
-	FAILED    VirtualIPState = "Failed to allocate"
-	RESERVING VirtualIPState = "Reserving IP"
-	CLONING   VirtualIPState = "Cloning service"
-	UPDATING  VirtualIPState = "Updating service"
+	StateValid      VirtualIPState = "Valid"
+	StateError      VirtualIPState = "Error"
+	StateCreatingIP VirtualIPState = "Creating IP object"
+	StateExposing   VirtualIPState = "Exposing service"
 )
 
 // VirtualIPStatus defines the observed state of VirtualIP
@@ -57,9 +56,10 @@ type VirtualIPStatus struct {
 	Message         string         `json:"message,omitempty"`
 	IP              string         `json:"IP,omitempty"`
 	KeepalivedGroup string         `json:"keepalivedGroup,omitempty"`
-	State           VirtualIPState `json:"state,omitempty"`
 	Service         string         `json:"service,omitempty"`
 	Clone           *bool          `json:"clone,omitempty"`
+	GSM             string         `json:"gsm,omitempty"`
+	State           VirtualIPState `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -67,6 +67,7 @@ type VirtualIPStatus struct {
 // +kubebuilder:resource:shortName=vip,scope=Namespaced
 // +kubebuilder:printcolumn:name="Service",type=string,JSONPath=`.status.service`
 // +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.status.IP`
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 
 // VirtualIP is the Schema for the virtualips API
 type VirtualIP struct {

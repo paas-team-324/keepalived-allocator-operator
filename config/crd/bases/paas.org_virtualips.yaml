@@ -25,6 +25,9 @@ spec:
     - jsonPath: .status.IP
       name: IP
       type: string
+    - jsonPath: .status.state
+      name: State
+      type: string
     name: v1
     schema:
       openAPIV3Schema:
@@ -65,6 +68,8 @@ spec:
                 type: string
               clone:
                 type: boolean
+              gsm:
+                type: string
               keepalivedGroup:
                 type: string
               message:

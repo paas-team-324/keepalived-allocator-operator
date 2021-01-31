@@ -19,6 +19,8 @@ package main
 import (
 	"flag"
 	"os"
+	"strconv"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -58,12 +60,22 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	opts := zap.Options{
-		Development: true,
+		Development: false,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// Try parsing reconciliation period from environment variable
+	const envReconciliationIntervalMS = "RECONCILIATION_INTERVAL_MS"
+	defaultSyncPeriodMS := uint64(60000)
+	syncPeriodMS, err := strconv.ParseUint(os.Getenv(envReconciliationIntervalMS), 10, 32)
+	if err != nil {
+		setupLog.Info("could not parse " + envReconciliationIntervalMS + " environment variable, falling back to " + strconv.Itoa(int(defaultSyncPeriodMS)))
+		syncPeriodMS = defaultSyncPeriodMS
+	}
+	syncPeriod := time.Duration(syncPeriodMS) * time.Millisecond
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -72,6 +84,7 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "88cd116a.org",
+		SyncPeriod:             &syncPeriod,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
