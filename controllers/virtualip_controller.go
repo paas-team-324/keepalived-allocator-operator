@@ -312,7 +312,8 @@ func (r *VirtualIPReconciler) finishReconciliation(virtualIP *paasv1.VirtualIP, 
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.7.0/pkg/reconcile
 func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = r.Log.WithValues("virtualip", req.NamespacedName)
+	current := r.Log.WithValues("virtualip", req.NamespacedName)
+	current.Info("reconciling")
 
 	// get current VIP from cluster
 	virtualIP := &paasv1.VirtualIP{}
@@ -324,6 +325,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// initialize variables
 	deleteVIP := !virtualIP.DeletionTimestamp.IsZero()
 	ipFinalizer := "ip.finalizers.virtualips.paas.org"
+	serviceFinalizer := "service.finalizers.virtualips.paas.org"
 
 	// delete IP object for the current VIP
 	if deleteVIP {
@@ -345,6 +347,7 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				return r.finishReconciliation(virtualIP, err)
 			}
 
+			return ctrl.Result{}, nil
 		}
 
 	} else {
@@ -356,6 +359,13 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			if err != nil {
 				return r.finishReconciliation(virtualIP, err)
 			}
+
+			// update status for the next cycle
+			if err := r.Status().Update(context.Background(), virtualIP); err != nil {
+				return ctrl.Result{}, errors.New(fmt.Sprintf("failed to update VirtualIP status: %v", err))
+			}
+
+			return ctrl.Result{}, nil
 		}
 
 		// ensure IP object existence
@@ -383,11 +393,6 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		if !controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
 			controllerutil.AddFinalizer(virtualIP, ipFinalizer)
 
-			// update status for the next cycle (should not trigger a new cycle)
-			if err := r.Status().Update(context.Background(), virtualIP); err != nil {
-				return ctrl.Result{}, errors.New(fmt.Sprintf("failed to update VirtualIP status: %v", err))
-			}
-
 			// update object finalizers
 			if err := r.Update(context.Background(), virtualIP); err != nil {
 				return r.finishReconciliation(virtualIP, err)
@@ -398,20 +403,23 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	// decide on a service name
+	// decide on a service status
 	if virtualIP.Status.Service == "" {
 		virtualIP.Status.Service = virtualIP.Spec.Service
+		virtualIP.Status.Clone = &virtualIP.Spec.Clone
+
+		// update status for the next cycle
+		if err := r.Status().Update(context.Background(), virtualIP); err != nil {
+			return ctrl.Result{}, errors.New(fmt.Sprintf("failed to update VirtualIP status: %v", err))
+		}
+
+		return ctrl.Result{}, nil
 	}
 
 	// get service
 	service, err := r.getService(virtualIP)
 	if err != nil {
 		return r.finishReconciliation(virtualIP, err)
-	}
-
-	// check if should clone
-	if virtualIP.Status.Clone == nil {
-		virtualIP.Status.Clone = &virtualIP.Spec.Clone
 	}
 
 	// clone if specified
@@ -434,6 +442,23 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			return r.finishReconciliation(virtualIP, errors.New(fmt.Sprintf("failed to create/update the service: %v", err)))
 		}
 
+	}
+
+	// remove/add service finalizer if not present
+	if deleteVIP || !controllerutil.ContainsFinalizer(virtualIP, serviceFinalizer) {
+
+		if deleteVIP {
+			controllerutil.RemoveFinalizer(virtualIP, serviceFinalizer)
+		} else {
+			controllerutil.AddFinalizer(virtualIP, serviceFinalizer)
+		}
+
+		// update object finalizers with service finalizer
+		if err := r.Update(context.Background(), virtualIP); err != nil {
+			return r.finishReconciliation(virtualIP, err)
+		}
+
+		return ctrl.Result{}, nil
 	}
 
 	return r.finishReconciliation(virtualIP, nil)
