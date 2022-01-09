@@ -74,7 +74,7 @@ func (r *VirtualIPReconciler) getService(virtualIP *paasv1.VirtualIP) (*corev1.S
 func (r *VirtualIPReconciler) cloneService(virtualIP *paasv1.VirtualIP, clone *corev1.Service) (*corev1.Service, error) {
 
 	// update the new service
-	clone.Name = fmt.Sprintf("%s-keepalived-clone", clone.Name)
+	clone.Name = fmt.Sprintf("%s-keepalived-clone", virtualIP.Name)
 	clone.Spec.ClusterIP = ""
 	clone.ResourceVersion = ""
 
