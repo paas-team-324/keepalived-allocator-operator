@@ -30,7 +30,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	paasv1 "github.com/vlad-pbr/keepalived-allocator-operator/api/v1"
+	paasv1 "github.com/paas-team-324/keepalived-allocator-operator/api/v1"
 	// +kubebuilder:scaffold:imports
 )
 

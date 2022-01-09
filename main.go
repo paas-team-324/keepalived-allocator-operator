@@ -33,8 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	paasv1 "github.com/vlad-pbr/keepalived-allocator-operator/api/v1"
-	"github.com/vlad-pbr/keepalived-allocator-operator/controllers"
+	paasv1 "github.com/paas-team-324/keepalived-allocator-operator/api/v1"
+	"github.com/paas-team-324/keepalived-allocator-operator/controllers"
 	// +kubebuilder:scaffold:imports
 )
 

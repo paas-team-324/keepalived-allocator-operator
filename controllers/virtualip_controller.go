@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	paasv1 "github.com/vlad-pbr/keepalived-allocator-operator/api/v1"
+	paasv1 "github.com/paas-team-324/keepalived-allocator-operator/api/v1"
 )
 
 // VirtualIPReconciler reconciles a VirtualIP object
