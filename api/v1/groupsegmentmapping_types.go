@@ -28,15 +28,15 @@ type GroupSegmentMappingSpec struct {
 
 	// +kubebuilder:validation:Required
 	// Name of the matching KeepalivedGroup object
-	KeepalivedGroup string `json:"keepalivedGroup,omitempty"`
+	KeepalivedGroup string `json:"keepalivedGroup"`
 
 	// +kubebuilder:validation:Required
 	// Segment in which to allocate the IP address
-	Segment string `json:"segment,omitempty"`
+	Segment string `json:"segment"`
 
-	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Required
 	// Exclude the following IPs from the specified segment
-	ExcludedIPs []string `json:"excludedIPs,omitempty"`
+	ExcludedIPs []string `json:"excludedIPs"`
 }
 
 // GroupSegmentMappingStatus defines the observed state of GroupSegmentMapping
@@ -56,7 +56,7 @@ type GroupSegmentMapping struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   GroupSegmentMappingSpec   `json:"spec,omitempty"`
+	Spec   GroupSegmentMappingSpec   `json:"spec"`
 	Status GroupSegmentMappingStatus `json:"status,omitempty"`
 }
 

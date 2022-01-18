@@ -57,10 +57,16 @@ spec:
               segment:
                 description: Segment in which to allocate the IP address
                 type: string
+            required:
+            - excludedIPs
+            - keepalivedGroup
+            - segment
             type: object
           status:
             description: GroupSegmentMappingStatus defines the observed state of GroupSegmentMapping
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

@@ -26,13 +26,18 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: GroupSegmentMapping is the Schema for the groupsegmentmappings API
+        description: GroupSegmentMapping is the Schema for the groupsegmentmappings
+          API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
@@ -50,10 +55,16 @@ spec:
               segment:
                 description: Segment in which to allocate the IP address
                 type: string
+            required:
+            - excludedIPs
+            - keepalivedGroup
+            - segment
             type: object
           status:
             description: GroupSegmentMappingStatus defines the observed state of GroupSegmentMapping
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

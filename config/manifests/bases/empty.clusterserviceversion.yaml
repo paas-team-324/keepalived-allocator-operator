@@ -10,7 +10,8 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: GroupSegmentMapping is the Schema for the groupsegmentmappings API
+    - description: GroupSegmentMapping is the Schema for the groupsegmentmappings
+        API
       displayName: Group Segment Mapping
       kind: GroupSegmentMapping
       name: groupsegmentmappings.paas.org

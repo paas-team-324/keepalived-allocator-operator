@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -52,144 +51,16 @@ func getEnv(key, fallback string) string {
 	return value
 }
 
-var groupSegmentMappingLabel = "gsm"
+// global vars
+const groupSegmentMappingLabel = "gsm"
+const keepalivedAnnotationKey = "keepalived-operator.redhat-cop.io/keepalivedgroup"
+const ipAnnotationKey = "virtualips.paas.il/owner"
+const ipFinalizer = "ip.finalizers.virtualips.paas.org"
+const serviceFinalizer = "service.finalizers.virtualips.paas.org"
+
 var keepalivedGroupNamespace = getEnv("KEEPALIVED_GROUP_NAMESPACE", "keepalived-operator")
 
-func (r *VirtualIPReconciler) getService(virtualIP *paasv1.VirtualIP) (*corev1.Service, error) {
-
-	// get the service
-	service := &corev1.Service{}
-	err := r.Client.Get(context.Background(), client.ObjectKey{
-		Namespace: virtualIP.Namespace,
-		Name:      virtualIP.Status.Service,
-	}, service)
-	if err != nil {
-		return nil, err
-	}
-
-	// return service
-	return service, nil
-}
-
-func (r *VirtualIPReconciler) cloneService(virtualIP *paasv1.VirtualIP, clone *corev1.Service) (*corev1.Service, error) {
-
-	// update the new service
-	clone.Name = fmt.Sprintf("%s-keepalived-clone", virtualIP.Name)
-	clone.Spec.ClusterIP = ""
-	clone.ResourceVersion = ""
-
-	// set owner reference
-	clone.OwnerReferences = nil
-	err := controllerutil.SetOwnerReference(virtualIP, clone, r.Scheme)
-	if err != nil {
-		return nil, errors.New(fmt.Sprintf("received error while setting service's owner: %v", err))
-	}
-
-	return clone, nil
-}
-
-func (r *VirtualIPReconciler) patchService(service *corev1.Service, ip string, keepalivedGroup string, remove bool) {
-
-	// initialize annotations if needed
-	if service.Annotations == nil {
-		service.Annotations = make(map[string]string)
-	}
-
-	if !remove {
-		// annotate service with keepalived group annotation
-		service.Annotations["keepalived-operator.redhat-cop.io/keepalivedgroup"] =
-			fmt.Sprintf("%s/%s", keepalivedGroupNamespace, keepalivedGroup)
-
-		// set IP within ExternalIPs field
-		service.Spec.ExternalIPs = []string{ip}
-	} else {
-		delete(service.Annotations, "keepalived-operator.redhat-cop.io/keepalivedgroup")
-		service.Spec.ExternalIPs = []string{}
-	}
-}
-
-func (r *VirtualIPReconciler) labelIP(ipObject *paasv1.IP, virtualIP *paasv1.VirtualIP, gsmName string) {
-
-	// set appropriate labels and annotations
-	ipObject.Labels = map[string]string{groupSegmentMappingLabel: gsmName}
-	ipObject.Annotations = map[string]string{
-		"virtualips.paas.il/owner": client.ObjectKeyFromObject(virtualIP).String(),
-	}
-
-}
-
-func (r *VirtualIPReconciler) reserveIP(groupSegmentMapping *paasv1.GroupSegmentMapping, virtualIP *paasv1.VirtualIP) (string, error) {
-
-	// get list of available IPs within the cluster
-	availableIPs, err := r.getAvailableIPs(groupSegmentMapping)
-	if err != nil {
-		return "", err
-	}
-
-	// try to reserve an IP until we run out of IPs
-	for _, ip := range availableIPs {
-
-		// initialize IP object
-		ipObject := &paasv1.IP{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: ip,
-			},
-		}
-		r.labelIP(ipObject, virtualIP, groupSegmentMapping.Name)
-
-		// try creating IP object
-		err := r.Create(context.Background(), ipObject)
-
-		// no error - no problem
-		if err == nil {
-			return ip, nil
-
-			// if error and it's not AlreadyExists error - report
-		} else if err != nil && !apierrors.IsAlreadyExists(err) {
-			return "", errors.New(fmt.Sprintf("an error occurred while allocating IP: %v", err))
-		}
-	}
-
-	// could not allocate
-	return "", errors.New("there are no available IPs")
-}
-
-func (r *VirtualIPReconciler) getAvailableIPs(groupSegmentMapping *paasv1.GroupSegmentMapping) ([]string, error) {
-
-	// list allocated IPs from given GSM
-	IPList := &paasv1.IPList{}
-	selector := labels.SelectorFromSet(map[string]string{groupSegmentMappingLabel: groupSegmentMapping.Name})
-	if err := r.List(context.Background(), IPList, &client.ListOptions{LabelSelector: selector}); err != nil {
-		return nil, err
-	}
-
-	// gather a list of IPs we can't use
-	excludedIPs := []string{}
-	for _, IP := range IPList.Items {
-		excludedIPs = append(excludedIPs, IP.Name)
-	}
-	for _, ip := range groupSegmentMapping.Spec.ExcludedIPs {
-		excludedIPs = append(excludedIPs, ip)
-	}
-
-	// parse GSM's CIDR field
-	ipAddress, ipnet, err := net.ParseCIDR(groupSegmentMapping.Spec.Segment)
-	if err != nil {
-		return nil, err
-	}
-
-	// filter out excluded IPs from segment
-	var ips []string
-	for ipAddress := ipAddress.Mask(ipnet.Mask).To4(); ipnet.Contains(ipAddress); incrementIP(ipAddress) {
-		ip := ipAddress.String()
-		if !contains(excludedIPs, ip) {
-			ips = append(ips, ip)
-		}
-	}
-
-	return ips, nil
-}
-
+// general functions
 func incrementIP(ip net.IP) {
 	for j := len(ip) - 1; j >= 0; j-- {
 		if ip[j] == 255 {
@@ -210,96 +81,301 @@ func contains(arr []string, str string) bool {
 	return false
 }
 
-func (r *VirtualIPReconciler) getGSMs() (*[]paasv1.GroupSegmentMapping, error) {
+func (r *VirtualIPReconciler) patchIP(ipObject *paasv1.IP, virtualIP *paasv1.VirtualIP, gsmName string) {
+	// set appropriate labels and annotations
+	ipObject.Labels = map[string]string{groupSegmentMappingLabel: gsmName}
+	ipObject.Annotations = map[string]string{
+		ipAnnotationKey: client.ObjectKeyFromObject(virtualIP).String(),
+	}
+}
+
+func (r *VirtualIPReconciler) reserveIP(ctx context.Context, groupSegmentMapping *paasv1.GroupSegmentMapping, virtualIP *paasv1.VirtualIP, availableIPs []string) (string, error) {
+	// try to reserve an IP until we run out of IPs
+	for _, ip := range availableIPs {
+
+		// initialize IP object
+		ipObject := &paasv1.IP{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ip,
+			},
+		}
+		r.patchIP(ipObject, virtualIP, groupSegmentMapping.Name)
+
+		// try creating IP object
+		err := r.Create(ctx, ipObject)
+
+		// no error - no problem
+		if err == nil {
+			return ip, nil
+
+			// if error and it's not AlreadyExists error - report
+		} else if err != nil && !apierrors.IsAlreadyExists(err) {
+			return "", fmt.Errorf("an error occurred while allocating IP: %v", err)
+		}
+	}
+	// no available ip
+	return "", nil
+}
+
+func (r *VirtualIPReconciler) getAvailableIPs(ctx context.Context, groupSegmentMapping *paasv1.GroupSegmentMapping) ([]string, error) {
+
+	// list allocated IPs from given GSM
+	IPList := &paasv1.IPList{}
+	selector := labels.SelectorFromSet(map[string]string{groupSegmentMappingLabel: groupSegmentMapping.Name})
+	if err := r.List(ctx, IPList, &client.ListOptions{LabelSelector: selector}); err != nil {
+		return nil, err
+	}
+
+	// gather a list of IPs we can't use
+	excludedIPs := []string{}
+	for _, IP := range IPList.Items {
+		excludedIPs = append(excludedIPs, IP.Name)
+	}
+	excludedIPs = append(excludedIPs, groupSegmentMapping.Spec.ExcludedIPs...)
+
+	// parse GSM's CIDR field
+	ipAddress, ipnet, err := net.ParseCIDR(groupSegmentMapping.Spec.Segment)
+	if err != nil {
+		return nil, err
+	}
+
+	// filter out excluded IPs from segment
+	var ips []string
+	for ipAddress := ipAddress.Mask(ipnet.Mask).To4(); ipnet.Contains(ipAddress); incrementIP(ipAddress) {
+		ip := ipAddress.String()
+		if !contains(excludedIPs, ip) {
+			ips = append(ips, ip)
+		}
+	}
+
+	return ips, nil
+}
+
+func (r *VirtualIPReconciler) getGSMs(ctx context.Context) (*[]paasv1.GroupSegmentMapping, error) {
 	gsms := &paasv1.GroupSegmentMappingList{}
-	if err := r.Client.List(context.Background(), gsms, &client.ListOptions{}); err != nil {
-		r.Log.Error(err, err.Error())
+	if err := r.Client.List(ctx, gsms, &client.ListOptions{}); err != nil {
 		return nil, err
 	}
 
 	return &gsms.Items, nil
 }
 
-func (r *VirtualIPReconciler) getGSMBySegment(segment string) (*paasv1.GroupSegmentMapping, error) {
+func (r *VirtualIPReconciler) getGSMByIP(ctx context.Context, ip string) (*paasv1.GroupSegmentMapping, error) {
+	IP := net.ParseIP(ip)
+	if IP == nil {
+		return nil, fmt.Errorf("the requested ip could not be parsed")
+	}
 
-	GroupSegmentMappingList, err := r.getGSMs()
+	GroupSegmentMappingList, err := r.getGSMs(ctx)
 	if err != nil {
-		r.Log.Error(err, err.Error())
 		return nil, err
 	}
 
 	for _, gsm := range *GroupSegmentMappingList {
-		if gsm.Spec.Segment == segment {
+		_, ipnet, err := net.ParseCIDR(gsm.Spec.Segment)
+		if err != nil {
+			return nil, err
+		}
+		if ipnet.Contains(IP) {
 			return &gsm, nil
 		}
 	}
-
-	err = errors.New("GroupSegmentMapping not found for the requested segment")
-	r.Log.Error(err, err.Error())
+	err = fmt.Errorf("GroupSegmentMapping not found for the requested ip")
 	return nil, err
 }
 
-func (r *VirtualIPReconciler) allocateIP(virtualIP *paasv1.VirtualIP) (string, string, string, error) {
-
-	var ip string
-	var keepalivedGroup string
-	var gsmName string
-
-	// allocate IP from given segment
-	if virtualIP.Spec.Segment != "" {
-
-		// find matching GSM
-		gsm, err := r.getGSMBySegment(virtualIP.Spec.Segment)
+func (r *VirtualIPReconciler) allocateSpecificIP(ctx context.Context, virtualIP *paasv1.VirtualIP) (string, string, string, error) {
+	if virtualIP.Spec.IP != "" {
+		// get the gsm of the requested ip
+		gsm, err := r.getGSMByIP(ctx, virtualIP.Spec.IP)
 		if err != nil {
 			return "", "", "", err
 		}
 
-		// reserve IP from given GSM
-		ip, err = r.reserveIP(gsm, virtualIP)
+		// check if the ip is available
+		availableIPs, err := r.getAvailableIPs(ctx, gsm)
 		if err != nil {
 			return "", "", "", err
 		}
 
-		// store keepalived group info
-		keepalivedGroup = gsm.Spec.KeepalivedGroup
-		gsmName = gsm.Name
+		if !contains(availableIPs, virtualIP.Spec.IP) {
+			return "", "", "", fmt.Errorf("the requested ip is not available")
+		}
 
-		// allocate any available IP address
-	} else {
+		// try to reserve the requested ip
+		ip, err := r.reserveIP(ctx, gsm, virtualIP, []string{virtualIP.Spec.IP})
+		if err != nil {
+			return "", "", "", err
+		}
+		return ip, gsm.Spec.KeepalivedGroup, gsm.Name, nil
+	}
+	return "", "", "", nil
+}
 
+func (r *VirtualIPReconciler) allocateAnyIP(ctx context.Context, virtualIP *paasv1.VirtualIP) (string, string, string, error) {
+	if virtualIP.Spec.IP == "" {
 		// get all GSMs
-		gsms, err := r.getGSMs()
+		gsms, err := r.getGSMs(ctx)
 		if err != nil {
-			return "", "", "", errors.New(fmt.Sprintf("failed to list GroupSegmentMappings: %v", err))
+			return "", "", "", fmt.Errorf("failed to list GroupSegmentMappings: %v", err)
 		}
 
 		// iterate over all GSMs
 		for _, gsm := range *gsms {
 
 			// try reserving IP from given GSM
-			ip, err = r.reserveIP(&gsm, virtualIP)
+			availableIPs, err := r.getAvailableIPs(ctx, &gsm)
 			if err != nil {
 				return "", "", "", err
 			}
 
-			// store keepalived group info
+			ip, err := r.reserveIP(ctx, &gsm, virtualIP, availableIPs)
+			if err != nil {
+				return "", "", "", err
+			}
+
+			// if we found an ip we are done
 			if ip != "" {
-				keepalivedGroup = gsm.Spec.KeepalivedGroup
-				gsmName = gsm.Name
-				break
+				return ip, gsm.Spec.KeepalivedGroup, gsm.Name, nil
 			}
 		}
 	}
-
-	// make sure that we received a valid IP address
-	if ip == "" {
-		return "", "", "", errors.New("no IP could be allocated")
-	}
-
-	return ip, keepalivedGroup, gsmName, nil
+	return "", "", "", nil
 }
 
-func (r *VirtualIPReconciler) updateStatus(virtualIP *paasv1.VirtualIP, logger logr.Logger, e error) (ctrl.Result, error) {
+func (r *VirtualIPReconciler) allocateIP(ctx context.Context, virtualIP *paasv1.VirtualIP) (string, string, string, error) {
+
+	var ip string
+	var keepalivedGroup string
+	var gsmName string
+
+	// try to get specific ip
+	ip, keepalivedGroup, gsmName, err := r.allocateSpecificIP(ctx, virtualIP)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to allocate specific ip: %v", err)
+	}
+
+	// check if we got an ip
+	if ip != "" {
+		return ip, keepalivedGroup, gsmName, nil
+	}
+
+	// try to get any ip
+	ip, keepalivedGroup, gsmName, err = r.allocateAnyIP(ctx, virtualIP)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to allocate any ip: %v", err)
+	}
+
+	// check if we got an ip
+	if ip != "" {
+		return ip, keepalivedGroup, gsmName, nil
+	}
+	return "", "", "", fmt.Errorf("no IP could be allocated")
+}
+
+func (r *VirtualIPReconciler) getOriginalService(ctx context.Context, virtualIP *paasv1.VirtualIP) (*corev1.Service, error) {
+	service := &corev1.Service{}
+	err := r.Client.Get(ctx, client.ObjectKey{
+		Namespace: virtualIP.Namespace,
+		Name:      virtualIP.Status.Service,
+	}, service)
+	if err != nil {
+		return nil, err
+	}
+	return service, nil
+}
+
+func (r *VirtualIPReconciler) buildKeepalivedClone(virtualIP *paasv1.VirtualIP, service *corev1.Service) error {
+	// update the new service
+	service.Name = fmt.Sprintf("%s-keepalived-clone", virtualIP.Name)
+	service.Spec.ClusterIP = ""
+	service.ResourceVersion = ""
+
+	// the clone needs to be of type ClusterIP
+	service.Spec.Type = corev1.ServiceTypeClusterIP
+	service.Spec.ExternalTrafficPolicy = ""
+	if service.Spec.Ports != nil {
+		for i := range service.Spec.Ports {
+			service.Spec.Ports[i].NodePort = 0
+		}
+	}
+
+	// set owner reference
+	service.OwnerReferences = nil
+	err := controllerutil.SetOwnerReference(virtualIP, service, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("received error while setting service's owner: %v", err)
+	}
+
+	// initialize annotations if needed
+	if service.Annotations == nil {
+		service.Annotations = make(map[string]string)
+	}
+
+	// annotate service with keepalived group annotation
+	service.Annotations[keepalivedAnnotationKey] = fmt.Sprintf("%s/%s", keepalivedGroupNamespace, virtualIP.Status.KeepalivedGroup)
+
+	// set IP within ExternalIPs field
+	service.Spec.ExternalIPs = []string{virtualIP.Status.IP}
+
+	virtualIP.Status.ClonedService = service.Name
+	return nil
+}
+
+func (r *VirtualIPReconciler) patchService(current *corev1.Service, desired *corev1.Service) {
+	if desired.Labels != nil {
+		in, out := &desired.Labels, &current.Labels
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	} else {
+		current.Labels = nil
+	}
+
+	if desired.Annotations != nil {
+		in, out := &desired.Annotations, &current.Annotations
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	} else {
+		current.Annotations = nil
+	}
+
+	if desired.Spec.Ports != nil {
+		in, out := &desired.Spec.Ports, &current.Spec.Ports
+		*out = make([]corev1.ServicePort, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	} else {
+		current.Spec.Ports = nil
+	}
+
+	if desired.Spec.Selector != nil {
+		in, out := &desired.Spec.Selector, &current.Spec.Selector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	} else {
+		current.Spec.Selector = nil
+	}
+
+	if desired.Spec.SessionAffinityConfig != nil {
+		in, out := &desired.Spec.SessionAffinityConfig, &current.Spec.SessionAffinityConfig
+		*out = new(corev1.SessionAffinityConfig)
+		(*in).DeepCopyInto(*out)
+	} else {
+		current.Spec.SessionAffinityConfig = nil
+	}
+
+	current.Spec.SessionAffinity = desired.Spec.SessionAffinity
+	current.Spec.PublishNotReadyAddresses = desired.Spec.PublishNotReadyAddresses
+}
+
+func (r *VirtualIPReconciler) updateStatus(ctx context.Context, virtualIP *paasv1.VirtualIP, logger logr.Logger, e error) (ctrl.Result, error) {
 
 	// log error if present
 	if e != nil {
@@ -311,12 +387,144 @@ func (r *VirtualIPReconciler) updateStatus(virtualIP *paasv1.VirtualIP, logger l
 	// do not update status of a VIP that is being deleted
 	if virtualIP.DeletionTimestamp.IsZero() {
 
-		if err := r.Status().Update(context.Background(), virtualIP); err != nil {
-			return ctrl.Result{}, errors.New(fmt.Sprintf("failed to update VirtualIP status: %v", err))
+		if err := r.Status().Update(ctx, virtualIP); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update VirtualIP status: %v", err)
 		}
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *VirtualIPReconciler) deleteVIP(ctx context.Context, virtualIP *paasv1.VirtualIP, logger logr.Logger) (ctrl.Result, error) {
+
+	// delete the cloned service
+	if controllerutil.ContainsFinalizer(virtualIP, serviceFinalizer) {
+
+		// remove the cloned service from cluster
+		if err := r.Delete(ctx, &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      virtualIP.Status.ClonedService,
+				Namespace: virtualIP.Namespace,
+			},
+		}); err != nil {
+			return r.updateStatus(ctx, virtualIP, logger, err)
+		}
+
+		// remove service finalizer and update
+		controllerutil.RemoveFinalizer(virtualIP, serviceFinalizer)
+		if err := r.Update(ctx, virtualIP); err != nil {
+			return r.updateStatus(ctx, virtualIP, logger, err)
+		}
+
+		return ctrl.Result{}, nil
+	}
+
+	// delete the IP
+	if controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
+
+		// remove IP object from cluster
+		if err := r.Delete(ctx, &paasv1.IP{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: virtualIP.Status.IP,
+			},
+		}); err != nil {
+			return r.updateStatus(ctx, virtualIP, logger, err)
+		}
+
+		// remove IP finalizer and update
+		controllerutil.RemoveFinalizer(virtualIP, ipFinalizer)
+		if err := r.Update(ctx, virtualIP); err != nil {
+			return r.updateStatus(ctx, virtualIP, logger, err)
+		}
+	}
+	return ctrl.Result{}, nil
+}
+
+func (r *VirtualIPReconciler) reconcileIP(ctx context.Context, virtualIP *paasv1.VirtualIP, logger logr.Logger) (ctrl.Result, bool, error) {
+
+	// allocate a new IP address if not present
+	if virtualIP.Status.IP == "" {
+
+		// TODO: why can't the bellow line be ":="?
+		var err error
+		virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, virtualIP.Status.GSM, err = r.allocateIP(ctx, virtualIP)
+		if err != nil {
+			result, err := r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not allocate an IP: %v", err))
+			return result, true, err
+		}
+
+		// update status for the next cycle
+		virtualIP.Status.Message = "creating IP object for the service"
+		virtualIP.Status.State = paasv1.StateCreatingIP
+		result, err := r.updateStatus(ctx, virtualIP, logger, nil)
+		return result, true, err
+	}
+
+	// TODO: we need a validating webhook on ip that makes sure that only the operator's service account can create/update/delete ip
+
+	// add finalizer for IP object
+	if !controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
+		controllerutil.AddFinalizer(virtualIP, ipFinalizer)
+
+		// update object finalizers
+		if err := r.Update(ctx, virtualIP); err != nil {
+			result, err := r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not add finalizer for IP object: %v", err))
+			return result, true, err
+		}
+		return ctrl.Result{}, true, nil
+	}
+	return ctrl.Result{}, false, nil
+}
+
+func (r *VirtualIPReconciler) reconcileService(ctx context.Context, virtualIP *paasv1.VirtualIP, logger logr.Logger) (ctrl.Result, error) {
+
+	// decide on the service status
+	if virtualIP.Status.Service != virtualIP.Spec.Service {
+		virtualIP.Status.Service = virtualIP.Spec.Service
+
+		// update status for the next cycle
+		virtualIP.Status.Message = "exposing service with an external IP"
+		virtualIP.Status.State = paasv1.StateExposing
+		return r.updateStatus(ctx, virtualIP, logger, nil)
+	}
+
+	// get the original service
+	service, err := r.getOriginalService(ctx, virtualIP)
+	if err != nil {
+		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not get the service to be exposed: %v", err))
+	}
+
+	// build the keepalived service's struct
+	err = r.buildKeepalivedClone(virtualIP, service)
+	if err != nil {
+		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("received error while cloning the service: %v", err))
+	}
+
+	clone := service.DeepCopy()
+	// on create - run the func and create the clone
+	// on update - clone will be the current service and then func will run and clone will be updated
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, clone, func() error {
+		r.patchService(clone, service)
+		return nil
+	})
+	if err != nil {
+		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("failed to create/update the cloned service: %v", err))
+	}
+
+	// add service finalizer if not present
+	if !controllerutil.ContainsFinalizer(virtualIP, serviceFinalizer) {
+		controllerutil.AddFinalizer(virtualIP, serviceFinalizer)
+
+		// update object finalizers
+		if err := r.Update(ctx, virtualIP); err != nil {
+			return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not add finalizer for service: %v", err))
+		}
+		return ctrl.Result{}, nil
+	}
+
+	virtualIP.Status.Message = "successfully allocated an IP address"
+	virtualIP.Status.State = paasv1.StateValid
+	return r.updateStatus(ctx, virtualIP, logger, nil)
 }
 
 // +kubebuilder:rbac:groups=paas.org,resources=virtualips,verbs=get;list;watch;create;update;patch;delete
@@ -338,142 +546,24 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// get current VIP from cluster
 	virtualIP := &paasv1.VirtualIP{}
-	err := r.Client.Get(context.Background(), req.NamespacedName, virtualIP)
+	err := r.Client.Get(ctx, req.NamespacedName, virtualIP)
 	if err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// initialize variables
-	deleteVIP := !virtualIP.DeletionTimestamp.IsZero()
-	ipFinalizer := "ip.finalizers.virtualips.paas.org"
-	serviceFinalizer := "service.finalizers.virtualips.paas.org"
-
-	// delete IP object for the current VIP
-	if deleteVIP {
-
-		if controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
-
-			// remove IP object from cluster
-			if err := r.Delete(context.Background(), &paasv1.IP{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: virtualIP.Status.IP,
-				},
-			}); err != nil {
-				return r.updateStatus(virtualIP, logger, err)
-			}
-
-			// remove IP finalizer and update
-			controllerutil.RemoveFinalizer(virtualIP, ipFinalizer)
-			if err := r.Update(context.Background(), virtualIP); err != nil {
-				return r.updateStatus(virtualIP, logger, err)
-			}
-
-			return ctrl.Result{}, nil
-		}
-
-	} else {
-
-		// allocate a new IP address if not present
-		if virtualIP.Status.IP == "" {
-
-			virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, virtualIP.Status.GSM, err = r.allocateIP(virtualIP)
-			if err != nil {
-				return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not allocate an IP: %v", err)))
-			}
-
-			// update status for the next cycle
-			virtualIP.Status.Message = "creating IP object for the service"
-			virtualIP.Status.State = paasv1.StateCreatingIP
-			return r.updateStatus(virtualIP, logger, nil)
-		}
-
-		// ensure IP object existence
-		ipObject := &paasv1.IP{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: virtualIP.Status.IP,
-			},
-		}
-		_, err := controllerutil.CreateOrUpdate(context.Background(), r.Client, ipObject, func() error {
-			r.labelIP(ipObject, virtualIP, virtualIP.Status.GSM)
-			return nil
-		})
-		if err != nil {
-			return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not create/update an IP object: %v", err)))
-		}
-
-		// add finalizer for IP object
-		if !controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
-			controllerutil.AddFinalizer(virtualIP, ipFinalizer)
-
-			// update object finalizers
-			if err := r.Update(context.Background(), virtualIP); err != nil {
-				return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not add finalizer for IP object: %v", err)))
-			}
-
-			// end reconciliation cycle - the update above will trigger a new cycle
-			return ctrl.Result{}, nil
-		}
+	// check if object is terminating
+	if !virtualIP.DeletionTimestamp.IsZero() {
+		return r.deleteVIP(ctx, virtualIP, logger)
 	}
 
-	// decide on the service status
-	if virtualIP.Status.Service == "" {
-		virtualIP.Status.Service = virtualIP.Spec.Service
-		virtualIP.Status.Clone = &virtualIP.Spec.Clone
-
-		// update status for the next cycle
-		virtualIP.Status.Message = "exposing service with an external IP"
-		virtualIP.Status.State = paasv1.StateExposing
-		return r.updateStatus(virtualIP, logger, nil)
+	// reconcile the IP object
+	result, finished, err := r.reconcileIP(ctx, virtualIP, logger)
+	if finished {
+		return result, err
 	}
 
-	// get service
-	service, err := r.getService(virtualIP)
-	if err != nil {
-		return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not get service to be exposed: %v", err)))
-	}
-
-	// clone if specified
-	if *virtualIP.Status.Clone {
-		service, err = r.cloneService(virtualIP, service)
-		if err != nil {
-			return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("received error while cloning service: %v", err)))
-		}
-	}
-
-	// do not update clone when deleting as it does not exist anymore
-	if !(deleteVIP && *virtualIP.Status.Clone) {
-
-		// patch and create/update service
-		_, err = controllerutil.CreateOrUpdate(context.Background(), r.Client, service, func() error {
-			r.patchService(service, virtualIP.Status.IP, virtualIP.Status.KeepalivedGroup, deleteVIP)
-			return nil
-		})
-		if err != nil {
-			return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("failed to create/update the service: %v", err)))
-		}
-
-	}
-
-	// remove/add service finalizer if not present
-	if deleteVIP || !controllerutil.ContainsFinalizer(virtualIP, serviceFinalizer) {
-
-		if deleteVIP {
-			controllerutil.RemoveFinalizer(virtualIP, serviceFinalizer)
-		} else {
-			controllerutil.AddFinalizer(virtualIP, serviceFinalizer)
-		}
-
-		// update object finalizers with service finalizer
-		if err := r.Update(context.Background(), virtualIP); err != nil {
-			return r.updateStatus(virtualIP, logger, errors.New(fmt.Sprintf("could not add finalizer for service: %v", err)))
-		}
-
-		return ctrl.Result{}, nil
-	}
-
-	virtualIP.Status.Message = "successfully allocated an IP address"
-	virtualIP.Status.State = paasv1.StateValid
-	return r.updateStatus(virtualIP, logger, nil)
+	// reconcile the service
+	return r.reconcileService(ctx, virtualIP, logger)
 }
 
 // SetupWithManager sets up the controller with the Manager.

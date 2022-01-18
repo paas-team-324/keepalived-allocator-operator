@@ -33,13 +33,8 @@ type VirtualIPSpec struct {
 	Service string `json:"service"`
 
 	// +kubebuilder:validation:Optional
-	// Segment in which to allocate the IP address
-	Segment string `json:"segment,omitempty"`
-
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:default:=false
-	// Whether to clone the service or not
-	Clone bool `json:"clone"`
+	// The IP address to give the vip
+	IP string `json:"ip,omitempty"`
 }
 
 type VirtualIPState string
@@ -54,10 +49,10 @@ const (
 // VirtualIPStatus defines the observed state of VirtualIP
 type VirtualIPStatus struct {
 	Message         string         `json:"message,omitempty"`
-	IP              string         `json:"IP,omitempty"`
+	IP              string         `json:"ip,omitempty"`
 	KeepalivedGroup string         `json:"keepalivedGroup,omitempty"`
 	Service         string         `json:"service,omitempty"`
-	Clone           *bool          `json:"clone,omitempty"`
+	ClonedService   string         `json:"clonedService,omitempty"`
 	GSM             string         `json:"gsm,omitempty"`
 	State           VirtualIPState `json:"state,omitempty"`
 }
@@ -74,7 +69,7 @@ type VirtualIP struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   VirtualIPSpec   `json:"spec,omitempty"`
+	Spec   VirtualIPSpec   `json:"spec"`
 	Status VirtualIPStatus `json:"status,omitempty"`
 }
 
