@@ -1,0 +1,7 @@
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: valid-specific-ip
+spec:
+  service: valid-specific-ip-service
+  ip: 1.1.2.4

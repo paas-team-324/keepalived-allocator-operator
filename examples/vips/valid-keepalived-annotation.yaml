@@ -1,0 +1,6 @@
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: valid-keepalived-annotation
+spec:
+  service: valid-keepalived-annotation-service

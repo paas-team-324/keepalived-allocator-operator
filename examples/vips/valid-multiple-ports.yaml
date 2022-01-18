@@ -1,0 +1,6 @@
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: valid-multiple-ports
+spec:
+  service: valid-multiple-ports-service

@@ -1,0 +1,7 @@
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: invalid-excluded-ip
+spec:
+  service: invalid-excluded-ip-service
+  ip: 1.1.2.1

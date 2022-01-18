@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    a: a1
+  name: valid-annotations-and-labels-service
+  labels:
+    l: l1
+spec:
+  ports:
+  - port: 5000
+    targetPort: 5000
+  selector:
+    app: valid-annotations-and-labels-app

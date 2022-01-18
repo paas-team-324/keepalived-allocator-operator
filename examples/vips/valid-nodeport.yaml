@@ -1,0 +1,6 @@
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: valid-nodeport
+spec:
+  service: valid-nodeport-service

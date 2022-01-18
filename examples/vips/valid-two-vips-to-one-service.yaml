@@ -1,0 +1,13 @@
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: valid-two-vips-to-one-service-1
+spec:
+  service: valid-two-vips-to-one-service
+---
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: valid-two-vips-to-one-service-2
+spec:
+  service: valid-two-vips-to-one-service

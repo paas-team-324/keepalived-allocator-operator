@@ -1,0 +1,6 @@
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: valid-annotations-and-labels
+spec:
+  service: valid-annotations-and-labels-service
