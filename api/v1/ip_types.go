@@ -36,6 +36,7 @@ type IPStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="GroupSegmentMapping",type=string,JSONPath=`.metadata.labels.gsm`
 // +kubebuilder:printcolumn:name="Owner",type=string,JSONPath=`.metadata.annotations.virtualips\.paas\.il/owner`
+// +kubebuilder:printcolumn:name="AGE",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // IP is the Schema for the ips API
 type IP struct {

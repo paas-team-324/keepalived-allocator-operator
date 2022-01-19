@@ -61,8 +61,9 @@ type VirtualIPStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=vip,scope=Namespaced
 // +kubebuilder:printcolumn:name="Service",type=string,JSONPath=`.status.service`
-// +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.status.IP`
+// +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.status.ip`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
+// +kubebuilder:printcolumn:name="AGE",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // VirtualIP is the Schema for the virtualips API
 type VirtualIP struct {

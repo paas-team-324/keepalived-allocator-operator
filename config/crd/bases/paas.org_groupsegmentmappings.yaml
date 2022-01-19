@@ -25,6 +25,9 @@ spec:
     - jsonPath: .spec.segment
       name: Segment
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
     name: v1
     schema:
       openAPIV3Schema:

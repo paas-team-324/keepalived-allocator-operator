@@ -22,12 +22,15 @@ spec:
     - jsonPath: .status.service
       name: Service
       type: string
-    - jsonPath: .status.IP
+    - jsonPath: .status.ip
       name: IP
       type: string
     - jsonPath: .status.state
       name: State
       type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
     name: v1
     schema:
       openAPIV3Schema:

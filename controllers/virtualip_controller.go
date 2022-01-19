@@ -59,7 +59,7 @@ func getIllegalPorts() []int {
 
 	err := json.Unmarshal([]byte(illegalPortsJson), &ports)
 	if err != nil {
-		fmt.Printf("an error occurred while unmarshaling the illegal ports file: %v\n", err)
+		fmt.Printf("an error occurred while unmarshaling the illegal ports: %v\n", err)
 		os.Exit(1)
 	}
 	return ports
@@ -567,10 +567,6 @@ func (r *VirtualIPReconciler) reconcileService(ctx context.Context, virtualIP *p
 	virtualIP.Status.State = paasv1.StateValid
 	return r.updateStatus(ctx, virtualIP, logger, nil)
 }
-
-// +kubebuilder:rbac:groups=paas.org,resources=virtualips,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=paas.org,resources=virtualips/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=paas.org,resources=virtualips/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
