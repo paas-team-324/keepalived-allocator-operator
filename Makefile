@@ -23,6 +23,33 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+# self signed cert variable
+NAMESPACE ?= keepalived-operator
+define WEBHOOK_CERT_REQ
+[req]
+distinguished_name = webhooks
+req_extensions = v3_req
+x509_extensions = v3_req
+prompt = no
+
+[webhooks]
+C = US
+ST = VA
+L = SomeCity
+O = MyCompany
+OU = MyDivision
+CN = keepalived-allocator-operator-webhook.$(NAMESPACE).svc
+
+[v3_req]
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = keepalived-allocator-operator-webhook.$(NAMESPACE).svc
+endef
+export WEBHOOK_CERT_REQ
+
 all: manager
 
 # Run tests
@@ -118,6 +145,16 @@ bundle: manifests kustomize
 	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
 	operator-sdk bundle validate ./bundle
+
+.PHONY: certs
+certs:
+	mkdir -p deploy/certs
+	@echo "$$WEBHOOK_CERT_REQ" | openssl req -nodes -newkey rsa:4096 \
+  		-keyout deploy/certs/tls.key \
+  		-out deploy/certs/tls.crt \
+  		-config /dev/stdin \
+  		-x509 -days 36500
+	cat deploy/certs/tls.crt | base64 -w0 > deploy/certs/ca.pem.b64
 
 # Build the bundle image.
 .PHONY: bundle-build

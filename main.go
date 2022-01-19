@@ -99,6 +99,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "VirtualIP")
 		os.Exit(1)
 	}
+	if err = (&paasv1.VirtualIP{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "VirtualIP")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("health", healthz.Ping); err != nil {

@@ -311,6 +311,21 @@ spec:
   selector:
     control-plane: keepalived-allocator-operator-controller-manager
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: keepalived-allocator-operator-webhook-server-cert
+  name: keepalived-allocator-operator-webhook
+  namespace: keepalived-operator
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    control-plane: keepalived-allocator-operator-controller-manager
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -348,7 +363,7 @@ spec:
         env:
         - name: ILLEGAL_PORTS
           value: '[10250, 111]'
-        image: docker.io/paasteam324/keepalived-allocator-operator:0.0.1
+        image: docker.io/paasteam324/keepalived-allocator-operator:0.0.5
         livenessProbe:
           httpGet:
             path: /healthz
@@ -356,6 +371,10 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
@@ -364,7 +383,44 @@ spec:
           periodSeconds: 10
         securityContext:
           allowPrivilegeEscalation: false
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
       securityContext:
         runAsUser: 65532
       serviceAccountName: keepalived-allocator-operator-sa
       terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: keepalived-allocator-operator-webhook-server-cert
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+  name: keepalived-allocator-operator-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: ""
+    service:
+      name: keepalived-allocator-operator-webhook
+      namespace: keepalived-operator
+      path: /validate-paas-org-v1-virtualip
+  failurePolicy: Fail
+  name: vvirtualip.kb.io
+  rules:
+  - apiGroups:
+    - paas.org
+    apiVersions:
+    - v1
+    operations:
+    - UPDATE
+    resources:
+    - virtualips
+  sideEffects: None
