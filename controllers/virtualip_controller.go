@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -51,6 +52,19 @@ func getEnv(key, fallback string) string {
 	return value
 }
 
+func getIllegalPorts() []int {
+	var ports []int
+
+	illegalPortsJson := getEnv("ILLEGAL_PORTS", "[]")
+
+	err := json.Unmarshal([]byte(illegalPortsJson), &ports)
+	if err != nil {
+		fmt.Printf("an error occurred while unmarshaling the illegal ports file: %v\n", err)
+		os.Exit(1)
+	}
+	return ports
+}
+
 // global vars
 const groupSegmentMappingLabel = "gsm"
 const keepalivedAnnotationKey = "keepalived-operator.redhat-cop.io/keepalivedgroup"
@@ -59,6 +73,7 @@ const ipFinalizer = "ip.finalizers.virtualips.paas.org"
 const serviceFinalizer = "service.finalizers.virtualips.paas.org"
 
 var keepalivedGroupNamespace = getEnv("KEEPALIVED_GROUP_NAMESPACE", "keepalived-operator")
+var illegalPorts = getIllegalPorts()
 
 // general functions
 func incrementIP(ip net.IP) {
@@ -72,9 +87,18 @@ func incrementIP(ip net.IP) {
 	}
 }
 
-func contains(arr []string, str string) bool {
+func containsString(arr []string, str string) bool {
 	for _, item := range arr {
 		if item == str {
+			return true
+		}
+	}
+	return false
+}
+
+func containsInt(arr []int, value int) bool {
+	for _, item := range arr {
+		if item == value {
 			return true
 		}
 	}
@@ -143,7 +167,7 @@ func (r *VirtualIPReconciler) getAvailableIPs(ctx context.Context, groupSegmentM
 	var ips []string
 	for ipAddress := ipAddress.Mask(ipnet.Mask).To4(); ipnet.Contains(ipAddress); incrementIP(ipAddress) {
 		ip := ipAddress.String()
-		if !contains(excludedIPs, ip) {
+		if !containsString(excludedIPs, ip) {
 			ips = append(ips, ip)
 		}
 	}
@@ -198,7 +222,7 @@ func (r *VirtualIPReconciler) allocateSpecificIP(ctx context.Context, virtualIP 
 			return "", "", "", err
 		}
 
-		if !contains(availableIPs, virtualIP.Spec.IP) {
+		if !containsString(availableIPs, virtualIP.Spec.IP) {
 			return "", "", "", fmt.Errorf("the requested ip is not available")
 		}
 
@@ -283,6 +307,18 @@ func (r *VirtualIPReconciler) getOriginalService(ctx context.Context, virtualIP 
 		return nil, err
 	}
 	return service, nil
+}
+
+func (r *VirtualIPReconciler) findIllegalPorts(service *corev1.Service) []int {
+	var ports []int
+	if service.Spec.Ports != nil {
+		for _, port := range service.Spec.Ports {
+			if containsInt(illegalPorts, int(port.Port)) {
+				ports = append(ports, int(port.Port))
+			}
+		}
+	}
+	return ports
 }
 
 func (r *VirtualIPReconciler) buildKeepalivedClone(virtualIP *paasv1.VirtualIP, service *corev1.Service) error {
@@ -492,6 +528,11 @@ func (r *VirtualIPReconciler) reconcileService(ctx context.Context, virtualIP *p
 	service, err := r.getOriginalService(ctx, virtualIP)
 	if err != nil {
 		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not get the service to be exposed: %v", err))
+	}
+
+	serviceIllegalPorts := r.findIllegalPorts(service)
+	if serviceIllegalPorts != nil {
+		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("the following ports are illegal: %v", serviceIllegalPorts))
 	}
 
 	// build the keepalived service's struct
