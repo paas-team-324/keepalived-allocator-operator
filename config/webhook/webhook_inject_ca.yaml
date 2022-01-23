@@ -9,4 +9,9 @@ webhooks:
     caBundle: ""
     service:
       name: keepalived-allocator-operator-webhook
+  name: vip.kb.io
+- clientConfig:
+    caBundle: ""
+    service:
+      name: keepalived-allocator-operator-webhook
   name: vvirtualip.kb.io

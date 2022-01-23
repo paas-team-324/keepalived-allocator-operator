@@ -32,6 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	paasv1 "github.com/paas-team-324/keepalived-allocator-operator/api/v1"
 	"github.com/paas-team-324/keepalived-allocator-operator/controllers"
@@ -103,6 +104,8 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "VirtualIP")
 		os.Exit(1)
 	}
+	mgr.GetWebhookServer().Register("/validate-paas-org-v1-ip", &webhook.Admission{Handler: &paasv1.IPValidationHandler{}})
+
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("health", healthz.Ping); err != nil {

@@ -496,8 +496,6 @@ func (r *VirtualIPReconciler) reconcileIP(ctx context.Context, virtualIP *paasv1
 		return result, true, err
 	}
 
-	// TODO: we need a validating webhook on ip that makes sure that only the operator's service account can create/update/delete ip
-
 	// add finalizer for IP object
 	if !controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
 		controllerutil.AddFinalizer(virtualIP, ipFinalizer)
