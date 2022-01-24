@@ -37,7 +37,7 @@ func (r *VirtualIP) SetupWebhookWithManager(mgr ctrl.Manager) error {
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-paas-org-v1-virtualip,mutating=false,failurePolicy=fail,sideEffects=None,groups=paas.org,resources=virtualips,verbs=update,versions=v1,name=vvirtualip.kb.io,admissionReviewVersions=v1
+//+kubebuilder:webhook:path=/validate-paas-org-v1-virtualip,mutating=false,failurePolicy=fail,sideEffects=None,groups=paas.org,resources=virtualips,verbs=create;update,versions=v1,name=vvirtualip.kb.io,admissionReviewVersions=v1
 
 var _ webhook.Validator = &VirtualIP{}
 
@@ -45,7 +45,10 @@ var _ webhook.Validator = &VirtualIP{}
 func (r *VirtualIP) ValidateCreate() error {
 	virtualiplog.Info("validate create", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object creation.
+	// the cloned service will be r.Name + '-keepalived-clone' so we must make sure that len(r.Name) + 17 < 64
+	if len(r.Name) > 46 {
+		return fmt.Errorf("the virtualip's name cannot be more than 46 chars")
+	}
 	return nil
 }
 

@@ -363,7 +363,7 @@ spec:
         env:
         - name: ILLEGAL_PORTS
           value: '[10250, 111]'
-        image: docker.io/paasteam324/keepalived-allocator-operator:0.0.5
+        image: docker.io/paasteam324/keepalived-allocator-operator:0.0.6
         livenessProbe:
           httpGet:
             path: /healthz
@@ -442,6 +442,7 @@ webhooks:
     apiVersions:
     - v1
     operations:
+    - CREATE
     - UPDATE
     resources:
     - virtualips

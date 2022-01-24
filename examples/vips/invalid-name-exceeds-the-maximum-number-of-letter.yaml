@@ -1,0 +1,7 @@
+
+apiVersion: paas.org/v1
+kind: VirtualIP
+metadata:
+  name: invalid-name-exceeds-the-maximum-number-of-letter
+spec:
+  service: invalid-name-exceeds-the-maximum-number-of-letter

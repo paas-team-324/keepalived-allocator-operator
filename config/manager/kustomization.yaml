@@ -9,4 +9,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: docker.io/paasteam324/keepalived-allocator-operator
-  newTag: 0.0.5
+  newTag: 0.0.6
