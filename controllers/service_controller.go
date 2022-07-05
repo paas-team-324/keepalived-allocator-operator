@@ -129,6 +129,58 @@ func (r *ServiceReconciler) getIPGroups(ctx context.Context) (*[]paasv1.IPGroup,
 	return &ipgroups.Items, nil
 }
 
+func (r *ServiceReconciler) getIPGroupByIP(ctx context.Context, ip string) (*paasv1.IPGroup, error) {
+	IP := net.ParseIP(ip)
+	if IP == nil {
+		return nil, fmt.Errorf("the requested ip could not be parsed")
+	}
+
+	IPGroupList, err := r.getIPGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, gsm := range *IPGroupList {
+		_, ipnet, err := net.ParseCIDR(gsm.Spec.Segment)
+		if err != nil {
+			return nil, err
+		}
+		if ipnet.Contains(IP) {
+			return &gsm, nil
+		}
+	}
+	err = fmt.Errorf("IPGroup not found for the requested ip")
+	return nil, err
+}
+
+func (r *ServiceReconciler) allocateSpecificIP(ctx context.Context, service *corev1.Service) (string, error) {
+	if service.Spec.LoadBalancerIP != "" {
+		// get the ipgroup of the requested ip
+		ipgroup, err := r.getIPGroupByIP(ctx, service.Spec.LoadBalancerIP)
+		if err != nil {
+			return "", err
+		}
+
+		// check if the ip is available
+		availableIPs, err := r.getAvailableIPs(ctx, ipgroup)
+		if err != nil {
+			return "", err
+		}
+
+		if !containsString(availableIPs, service.Spec.LoadBalancerIP) {
+			return "", fmt.Errorf("the requested ip is not available")
+		}
+
+		// try to reserve the requested ip
+		ip, err := r.reserveIP(ctx, ipgroup, service, []string{service.Spec.LoadBalancerIP})
+		if err != nil {
+			return "", err
+		}
+		return ip, nil
+	}
+	return "", nil
+}
+
 func (r *ServiceReconciler) allocateAnyIP(ctx context.Context, service *corev1.Service) (string, error) {
 
 	// get all ipgroups
@@ -160,23 +212,21 @@ func (r *ServiceReconciler) allocateAnyIP(ctx context.Context, service *corev1.S
 	return "", nil
 }
 
-// TODO
 func (r *ServiceReconciler) allocateIP(ctx context.Context, service *corev1.Service) (string, error) {
 
 	var ip string
 	var err error
 
-	// TODO
 	// try to get specific ip
-	// ip, keepalivedGroup, gsmName, err := r.allocateSpecificIP(ctx, virtualIP)
-	// if err != nil {
-	// 	return "", "", "", fmt.Errorf("failed to allocate specific ip: %v", err)
-	// }
+	ip, err = r.allocateSpecificIP(ctx, service)
+	if err != nil {
+		return "", fmt.Errorf("failed to allocate specific ip: %v", err)
+	}
 
-	// // check if we got an ip
-	// if ip != "" {
-	// 	return ip, keepalivedGroup, gsmName, nil
-	// }
+	// check if we got an ip
+	if ip != "" {
+		return ip, nil
+	}
 
 	// try to get any ip
 	ip, err = r.allocateAnyIP(ctx, service)
