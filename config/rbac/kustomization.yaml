@@ -3,7 +3,7 @@ resources:
 - aggregate-virtualips-admin-edit.yaml
 - aggregate-virtualips-view.yaml
 - aggregate-gsms-view.yaml
-#- role.yaml
+- role.yaml
 #- role_binding.yaml
 #- leader_election_role.yaml
 #- leader_election_role_binding.yaml

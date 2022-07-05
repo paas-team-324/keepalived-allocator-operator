@@ -18,12 +18,19 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"net"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	paasv1 "github.com/paas-team-324/keepalived-allocator-operator/api/v1"
 )
 
 // ServiceReconciler reconciles a Service object
@@ -36,6 +43,175 @@ type ServiceReconciler struct {
 //+kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=services/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups="",resources=services/finalizers,verbs=update
+
+//+kubebuilder:rbac:groups=paas.org,resources=ipgroups,verbs=get;list
+//+kubebuilder:rbac:groups=paas.org,resources=ips,verbs=get;list;watch;create;update;patch;delete
+
+// global vars
+const ipgroupLabel = "ipgroup"
+
+func (r *ServiceReconciler) patchIP(ipObject *paasv1.IP, service *corev1.Service, ipgroupName string) {
+	// set appropriate labels and annotations
+	ipObject.Labels = map[string]string{ipgroupLabel: ipgroupName}
+	ipObject.Annotations = map[string]string{
+		ipAnnotationKey: client.ObjectKeyFromObject(service).String(),
+	}
+}
+
+func (r *ServiceReconciler) reserveIP(ctx context.Context, ipgroup *paasv1.IPGroup, service *corev1.Service, availableIPs []string) (string, error) {
+	// try to reserve an IP until we run out of IPs
+	for _, ip := range availableIPs {
+
+		// initialize IP object
+		ipObject := &paasv1.IP{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: ip,
+			},
+		}
+		r.patchIP(ipObject, service, ipgroup.Name)
+
+		// try creating IP object
+		err := r.Create(ctx, ipObject)
+
+		// no error - no problem
+		if err == nil {
+			return ip, nil
+
+			// if error and it's not AlreadyExists error - report
+		} else if err != nil && !apierrors.IsAlreadyExists(err) {
+			return "", fmt.Errorf("an error occurred while allocating IP: %v", err)
+		}
+	}
+	// no available ip
+	return "", nil
+}
+
+func (r *ServiceReconciler) getAvailableIPs(ctx context.Context, ipgroup *paasv1.IPGroup) ([]string, error) {
+
+	// list allocated IPs from given IPGroup
+	IPList := &paasv1.IPList{}
+	selector := labels.SelectorFromSet(map[string]string{ipgroupLabel: ipgroup.Name})
+	if err := r.List(ctx, IPList, &client.ListOptions{LabelSelector: selector}); err != nil {
+		return nil, err
+	}
+
+	// gather a list of IPs we can't use
+	excludedIPs := []string{}
+	for _, IP := range IPList.Items {
+		excludedIPs = append(excludedIPs, IP.Name)
+	}
+	excludedIPs = append(excludedIPs, ipgroup.Spec.ExcludedIPs...)
+
+	// parse IPGroup's CIDR field
+	ipAddress, ipnet, err := net.ParseCIDR(ipgroup.Spec.Segment)
+	if err != nil {
+		return nil, err
+	}
+
+	// filter out excluded IPs from segment
+	var ips []string
+	for ipAddress := ipAddress.Mask(ipnet.Mask).To4(); ipnet.Contains(ipAddress); incrementIP(ipAddress) {
+		ip := ipAddress.String()
+		if !containsString(excludedIPs, ip) {
+			ips = append(ips, ip)
+		}
+	}
+
+	return ips, nil
+}
+
+func (r *ServiceReconciler) getIPGroups(ctx context.Context) (*[]paasv1.IPGroup, error) {
+	ipgroups := &paasv1.IPGroupList{}
+	if err := r.Client.List(ctx, ipgroups, &client.ListOptions{}); err != nil {
+		return nil, err
+	}
+
+	return &ipgroups.Items, nil
+}
+
+func (r *ServiceReconciler) allocateAnyIP(ctx context.Context, service *corev1.Service) (string, error) {
+
+	// get all ipgroups
+	ipgroups, err := r.getIPGroups(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to list IPGroups: %v", err)
+	}
+
+	// iterate over all IPGroups
+	for _, ipgroup := range *ipgroups {
+
+		// try reserving IP from given IPGroup
+		availableIPs, err := r.getAvailableIPs(ctx, &ipgroup)
+		if err != nil {
+			return "", err
+		}
+
+		ip, err := r.reserveIP(ctx, &ipgroup, service, availableIPs)
+		if err != nil {
+			return "", err
+		}
+
+		// if we found an ip we are done
+		if ip != "" {
+			return ip, nil
+		}
+	}
+
+	return "", nil
+}
+
+// TODO
+func (r *ServiceReconciler) allocateIP(ctx context.Context, service *corev1.Service) (string, error) {
+
+	var ip string
+	var err error
+
+	// TODO
+	// try to get specific ip
+	// ip, keepalivedGroup, gsmName, err := r.allocateSpecificIP(ctx, virtualIP)
+	// if err != nil {
+	// 	return "", "", "", fmt.Errorf("failed to allocate specific ip: %v", err)
+	// }
+
+	// // check if we got an ip
+	// if ip != "" {
+	// 	return ip, keepalivedGroup, gsmName, nil
+	// }
+
+	// try to get any ip
+	ip, err = r.allocateAnyIP(ctx, service)
+	if err != nil {
+		return "", fmt.Errorf("failed to allocate any ip: %v", err)
+	}
+
+	// check if we got an ip
+	if ip != "" {
+		return ip, nil
+	}
+
+	return "", fmt.Errorf("no IP could be allocated")
+}
+
+func (r *ServiceReconciler) reconcileService(ctx context.Context, service *corev1.Service, logger logr.Logger) (ctrl.Result, error) {
+
+	// allocate a new IP address if not present
+	if service.Status.LoadBalancer.Ingress == nil {
+
+		var err error
+		service.Status.LoadBalancer.Ingress = make([]corev1.LoadBalancerIngress, 1)
+		service.Status.LoadBalancer.Ingress[0].IP, err = r.allocateIP(ctx, service)
+		if err != nil {
+			// TODO how do we relay the error to user?
+			return ctrl.Result{}, err
+		}
+
+		if err = r.Status().Update(ctx, service); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update service status: %v", err)
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -56,9 +232,14 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	// TODO handle deletion / type change
+
 	// check if service is of type LoadBalancer
 	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		logger.Info("reconciling")
+
+		// reconcile the service object
+		return r.reconcileService(ctx, service, logger)
 	}
 
 	return ctrl.Result{}, nil

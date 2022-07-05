@@ -35,6 +35,32 @@ rules:
 - apiGroups:
   - paas.org
   resources:
+  - groupsegmentmappings
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - paas.org
+  resources:
+  - ipgroups
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - paas.org
+  resources:
+  - ips
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - paas.org
+  resources:
   - virtualips
   verbs:
   - create

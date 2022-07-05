@@ -343,6 +343,91 @@ rules:
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: keepalived-allocator-operator-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - services/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - paas.org
+  resources:
+  - groupsegmentmappings
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - paas.org
+  resources:
+  - ipgroups
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - paas.org
+  resources:
+  - ips
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - paas.org
+  resources:
+  - virtualips
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - paas.org
+  resources:
+  - virtualips/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - paas.org
+  resources:
+  - virtualips/status
+  verbs:
+  - get
+  - patch
+  - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: keepalived-allocator-operator-manager-rolebinding
@@ -419,7 +504,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: docker.io/paasteam324/keepalived-allocator-operator:0.3
+        image: image-registry.openshift-image-registry.svc:5000/keepalived-operator/keepalived-allocator-operator:0.3
         livenessProbe:
           httpGet:
             path: /healthz
