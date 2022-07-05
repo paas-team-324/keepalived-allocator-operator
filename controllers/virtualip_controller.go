@@ -67,12 +67,10 @@ func getIllegalPorts() []int {
 
 // global vars
 const groupSegmentMappingLabel = "gsm"
-const keepalivedAnnotationKey = "keepalived-operator.redhat-cop.io/keepalivedgroup"
 const ipAnnotationKey = "virtualips.paas.il/owner"
 const ipFinalizer = "ip.finalizers.virtualips.paas.org"
 const serviceFinalizer = "service.finalizers.virtualips.paas.org"
 
-var keepalivedGroupNamespace = getEnv("KEEPALIVED_GROUP_NAMESPACE", "keepalived-operator")
 var illegalPorts = getIllegalPorts()
 
 // general functions
@@ -347,9 +345,6 @@ func (r *VirtualIPReconciler) buildKeepalivedClone(virtualIP *paasv1.VirtualIP, 
 	if service.Annotations == nil {
 		service.Annotations = make(map[string]string)
 	}
-
-	// annotate service with keepalived group annotation
-	service.Annotations[keepalivedAnnotationKey] = fmt.Sprintf("%s/%s", keepalivedGroupNamespace, virtualIP.Status.KeepalivedGroup)
 
 	// set IP within ExternalIPs field
 	service.Spec.ExternalIPs = []string{virtualIP.Status.IP}
