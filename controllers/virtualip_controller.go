@@ -18,10 +18,8 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -43,35 +41,11 @@ type VirtualIPReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// get env variable or fallback if not defined
-func getEnv(key, fallback string) string {
-	value := os.Getenv(key)
-	if len(value) == 0 {
-		return fallback
-	}
-	return value
-}
-
-func getIllegalPorts() []int {
-	var ports []int
-
-	illegalPortsJson := getEnv("ILLEGAL_PORTS", "[]")
-
-	err := json.Unmarshal([]byte(illegalPortsJson), &ports)
-	if err != nil {
-		fmt.Printf("an error occurred while unmarshaling the illegal ports: %v\n", err)
-		os.Exit(1)
-	}
-	return ports
-}
-
 // global vars
 const groupSegmentMappingLabel = "gsm"
 const ipAnnotationKey = "virtualips.paas.il/owner"
 const ipFinalizer = "ip.finalizers.virtualips.paas.org"
 const serviceFinalizer = "service.finalizers.virtualips.paas.org"
-
-var illegalPorts = getIllegalPorts()
 
 // general functions
 func incrementIP(ip net.IP) {
@@ -88,15 +62,6 @@ func incrementIP(ip net.IP) {
 func containsString(arr []string, str string) bool {
 	for _, item := range arr {
 		if item == str {
-			return true
-		}
-	}
-	return false
-}
-
-func containsInt(arr []int, value int) bool {
-	for _, item := range arr {
-		if item == value {
 			return true
 		}
 	}
@@ -307,18 +272,6 @@ func (r *VirtualIPReconciler) getOriginalService(ctx context.Context, virtualIP 
 	return service, nil
 }
 
-func (r *VirtualIPReconciler) findIllegalPorts(service *corev1.Service) []int {
-	var ports []int
-	if service.Spec.Ports != nil {
-		for _, port := range service.Spec.Ports {
-			if containsInt(illegalPorts, int(port.Port)) {
-				ports = append(ports, int(port.Port))
-			}
-		}
-	}
-	return ports
-}
-
 func (r *VirtualIPReconciler) buildKeepalivedClone(virtualIP *paasv1.VirtualIP, service *corev1.Service) error {
 	// update the new service
 	service.Name = fmt.Sprintf("%s-keepalived-clone", virtualIP.Name)
@@ -521,11 +474,6 @@ func (r *VirtualIPReconciler) reconcileService(ctx context.Context, virtualIP *p
 	service, err := r.getOriginalService(ctx, virtualIP)
 	if err != nil {
 		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not get the service to be exposed: %v", err))
-	}
-
-	serviceIllegalPorts := r.findIllegalPorts(service)
-	if serviceIllegalPorts != nil {
-		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("the following ports are illegal: %v", serviceIllegalPorts))
 	}
 
 	// build the keepalived service's struct
