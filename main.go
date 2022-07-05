@@ -106,6 +106,14 @@ func main() {
 	}
 	mgr.GetWebhookServer().Register("/validate-paas-org-v1-ip", &webhook.Admission{Handler: &paasv1.IPValidationHandler{}})
 
+	if err = (&controllers.ServiceReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Service"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Service")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("health", healthz.Ping); err != nil {

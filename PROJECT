@@ -42,4 +42,8 @@ resources:
   kind: IPGroup
   path: github.com/paas-team-324/keepalived-allocator-operator/api/v1
   version: v1
+- controller: true
+  domain: ""
+  kind: Service
+  version: v1
 version: "3"

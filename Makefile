@@ -1,5 +1,5 @@
 # Current Operator version
-VERSION ?= 0.0.1
+VERSION ?= 0.3
 # Default bundle image tag
 BUNDLE_IMG ?= controller-bundle:$(VERSION)
 # Options for 'bundle-build'
@@ -113,6 +113,9 @@ docker-build:
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+
+# Build and push in one go
+build-push: docker-build docker-push
 
 # Download controller-gen locally if necessary
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen

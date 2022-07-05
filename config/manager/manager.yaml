@@ -27,9 +27,6 @@ spec:
         - /manager
         args:
         - --leader-elect
-        env:
-        - name: ILLEGAL_PORTS
-          value: '[10250, 111]'
         image: controller:latest
         name: manager
         securityContext:
