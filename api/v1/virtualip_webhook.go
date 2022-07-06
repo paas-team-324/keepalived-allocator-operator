@@ -53,9 +53,32 @@ func (r *VirtualIP) ValidateUpdate(old runtime.Object) error {
 	virtualiplog.Info("validate update", "name", r.Name)
 
 	oldVip := old.(*VirtualIP)
+
+	// check for migration annotation in both iterations
+	migrationAnnotationPresentOld := false
+	migrationAnnotationPresentNew := false
+	if oldVip.ObjectMeta.Annotations != nil {
+		_, migrationAnnotationPresentOld = oldVip.ObjectMeta.Annotations[MigrationAnnotation]
+	}
+	if r.ObjectMeta.Annotations != nil {
+		_, migrationAnnotationPresentNew = oldVip.ObjectMeta.Annotations[MigrationAnnotation]
+	}
+
+	// forbid backing out of migration
+	if migrationAnnotationPresentOld && !migrationAnnotationPresentNew {
+		return fmt.Errorf("VirtualIP migration can not be stopped")
+	}
+
+	// forbid service change during migration
+	if migrationAnnotationPresentOld && r.Spec.Service != oldVip.Spec.Service {
+		return fmt.Errorf("can not change service once migration has begun")
+	}
+
+	// ensure .spec.ip immutability
 	if r.Spec.IP != oldVip.Spec.IP {
 		return fmt.Errorf(".spec.ip is immutable")
 	}
+
 	return nil
 }
 

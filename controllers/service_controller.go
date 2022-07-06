@@ -142,13 +142,13 @@ func (r *ServiceReconciler) getIPGroupByIP(ctx context.Context, ip string) (*paa
 		return nil, err
 	}
 
-	for _, gsm := range *IPGroupList {
-		_, ipnet, err := net.ParseCIDR(gsm.Spec.Segment)
+	for _, ipgroup := range *IPGroupList {
+		_, ipnet, err := net.ParseCIDR(ipgroup.Spec.Segment)
 		if err != nil {
 			return nil, err
 		}
 		if ipnet.Contains(IP) {
-			return &gsm, nil
+			return &ipgroup, nil
 		}
 	}
 	err = fmt.Errorf("IPGroup not found for the requested ip")
@@ -300,10 +300,12 @@ func (r *ServiceReconciler) deleteIP(ctx context.Context, service *corev1.Servic
 		}
 	}
 
-	// remove IP from service status
-	service.Status.LoadBalancer.Ingress = nil
-	if err := r.Status().Update(ctx, service); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	// remove IP from service status if service is not being deleted
+	if service.DeletionTimestamp.IsZero() {
+		service.Status.LoadBalancer.Ingress = nil
+		if err := r.Status().Update(ctx, service); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil

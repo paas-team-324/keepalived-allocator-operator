@@ -44,7 +44,11 @@ const (
 	StateError      VirtualIPState = "Error"
 	StateCreatingIP VirtualIPState = "Creating IP object"
 	StateExposing   VirtualIPState = "Exposing service"
+	StateMigrating  VirtualIPState = "Migrating"
+	StateMigrated   VirtualIPState = "Migrated"
 )
+
+const MigrationAnnotation = "virtualips.paas.org/migrate"
 
 // VirtualIPStatus defines the observed state of VirtualIP
 type VirtualIPStatus struct {
