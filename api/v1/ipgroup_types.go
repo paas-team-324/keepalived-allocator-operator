@@ -45,6 +45,9 @@ type IPGroupStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=ipg,scope=Cluster
+// +kubebuilder:printcolumn:name="Segment",type=string,JSONPath=`.spec.segment`
+// +kubebuilder:printcolumn:name="AGE",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // IPGroup is the Schema for the ipgroups API
 type IPGroup struct {

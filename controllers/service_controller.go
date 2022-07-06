@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	paasv1 "github.com/paas-team-324/keepalived-allocator-operator/api/v1"
 )
@@ -49,6 +50,7 @@ type ServiceReconciler struct {
 
 // global vars
 const ipgroupLabel = "ipgroup"
+const serviceIPFinalizer = "ips.paas.org/finalizer"
 
 func (r *ServiceReconciler) patchIP(ipObject *paasv1.IP, service *corev1.Service, ipgroupName string) {
 	// set appropriate labels and annotations
@@ -242,7 +244,7 @@ func (r *ServiceReconciler) allocateIP(ctx context.Context, service *corev1.Serv
 	return "", fmt.Errorf("no IP could be allocated")
 }
 
-func (r *ServiceReconciler) reconcileService(ctx context.Context, service *corev1.Service, logger logr.Logger) (ctrl.Result, error) {
+func (r *ServiceReconciler) reconcileLBService(ctx context.Context, service *corev1.Service, logger logr.Logger) (ctrl.Result, error) {
 
 	// allocate a new IP address if not present
 	if service.Status.LoadBalancer.Ingress == nil {
@@ -258,6 +260,50 @@ func (r *ServiceReconciler) reconcileService(ctx context.Context, service *corev
 		if err = r.Status().Update(ctx, service); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update service status: %v", err)
 		}
+
+		// handle requested load balancer IP mismatch with status
+	} else if service.Spec.LoadBalancerIP != "" && service.Spec.LoadBalancerIP != service.Status.LoadBalancer.Ingress[0].IP {
+		return r.deleteIP(ctx, service)
+	}
+
+	// add IP finalizer to service
+	if !controllerutil.ContainsFinalizer(service, serviceIPFinalizer) {
+		controllerutil.AddFinalizer(service, serviceIPFinalizer)
+
+		// update object finalizers
+		if err := r.Update(ctx, service); err != nil {
+			return ctrl.Result{}, fmt.Errorf("could not add IP finalizer to service: %v", err)
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *ServiceReconciler) deleteIP(ctx context.Context, service *corev1.Service) (ctrl.Result, error) {
+
+	// delete the IP
+	if controllerutil.ContainsFinalizer(service, serviceIPFinalizer) {
+
+		// remove IP object from cluster
+		if err := r.Delete(ctx, &paasv1.IP{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: service.Status.LoadBalancer.Ingress[0].IP,
+			},
+		}); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete IP object: %v", err)
+		}
+
+		// remove IP finalizer and update
+		controllerutil.RemoveFinalizer(service, serviceIPFinalizer)
+		if err := r.Update(ctx, service); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove IP finalizer from service: %v", err)
+		}
+	}
+
+	// remove IP from service status
+	service.Status.LoadBalancer.Ingress = nil
+	if err := r.Status().Update(ctx, service); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	return ctrl.Result{}, nil
@@ -282,14 +328,21 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// TODO handle deletion / type change
+	// handle service deletion / type change
+	if service.Spec.Type == corev1.ServiceTypeLoadBalancer && !service.DeletionTimestamp.IsZero() || // LoadBalancer service is being deleted
+		service.Spec.Type != corev1.ServiceTypeLoadBalancer && service.Status.LoadBalancer.Ingress != nil { // service type has been changed from LoadBalancer
+		logger.Info("reconciling")
+
+		// remove IP from service
+		return r.deleteIP(ctx, service)
+	}
 
 	// check if service is of type LoadBalancer
 	if service.Spec.Type == corev1.ServiceTypeLoadBalancer {
 		logger.Info("reconciling")
 
-		// reconcile the service object
-		return r.reconcileService(ctx, service, logger)
+		// reconcile the LoadBalancer service object
+		return r.reconcileLBService(ctx, service, logger)
 	}
 
 	return ctrl.Result{}, nil

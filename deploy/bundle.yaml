@@ -88,10 +88,19 @@ spec:
     kind: IPGroup
     listKind: IPGroupList
     plural: ipgroups
+    shortNames:
+    - ipg
     singular: ipgroup
-  scope: Namespaced
+  scope: Cluster
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.segment
+      name: Segment
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
+    name: v1
     schema:
       openAPIV3Schema:
         description: IPGroup is the Schema for the ipgroups API
@@ -504,7 +513,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        image: image-registry.openshift-image-registry.svc:5000/keepalived-operator/keepalived-allocator-operator:0.3
+        image: docker.io/paasteam324/keepalived-allocator-operator:0.3
         livenessProbe:
           httpGet:
             path: /healthz
