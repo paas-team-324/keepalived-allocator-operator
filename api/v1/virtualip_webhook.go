@@ -45,11 +45,7 @@ var _ webhook.Validator = &VirtualIP{}
 func (r *VirtualIP) ValidateCreate() error {
 	virtualiplog.Info("validate create", "name", r.Name)
 
-	// the cloned service will be r.Name + '-keepalived-clone' so we must make sure that len(r.Name) + 17 < 64
-	if len(r.Name) > 46 {
-		return fmt.Errorf("the virtualip's name cannot be more than 46 chars")
-	}
-	return nil
+	return fmt.Errorf("VirtualIP resource is deprecated, use a service with type LoadBalancer instead")
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
