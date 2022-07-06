@@ -8,5 +8,5 @@ roleRef:
   name: cluster-admin
 subjects:
 - kind: ServiceAccount
-  name: keepalived-allocator-operator-sa
-  namespace: keepalived-operator
+  name: vip-allocator-operator-sa
+  namespace: vip-allocator-operator

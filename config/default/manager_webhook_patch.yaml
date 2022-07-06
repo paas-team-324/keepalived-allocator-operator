@@ -20,4 +20,4 @@ spec:
       - name: cert
         secret:
           defaultMode: 420
-          secretName: keepalived-allocator-operator-webhook-server-cert
+          secretName: vip-allocator-operator-webhook-server-cert

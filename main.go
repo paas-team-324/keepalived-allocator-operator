@@ -34,8 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	paasv1 "github.com/paas-team-324/keepalived-allocator-operator/api/v1"
-	"github.com/paas-team-324/keepalived-allocator-operator/controllers"
+	paasv1 "github.com/paas-team-324/vip-allocator-operator/api/v1"
+	"github.com/paas-team-324/vip-allocator-operator/controllers"
 	// +kubebuilder:scaffold:imports
 )
 
