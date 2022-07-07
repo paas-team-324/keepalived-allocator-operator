@@ -41,13 +41,6 @@ type VirtualIPReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=paas.org,resources=virtualips,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=paas.org,resources=virtualips/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=paas.org,resources=virtualips/finalizers,verbs=update
-
-//+kubebuilder:rbac:groups=paas.org,resources=groupsegmentmappings,verbs=get;list
-//+kubebuilder:rbac:groups=paas.org,resources=ips,verbs=get;list;watch;create;update;patch;delete
-
 // global vars
 const groupSegmentMappingLabel = "gsm"
 const ipAnnotationKey = "virtualips.paas.il/owner"
