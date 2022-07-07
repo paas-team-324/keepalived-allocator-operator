@@ -26,6 +26,8 @@ Note that:
 
 4.  Create the operator manifest: `kubectl create -f deploy/bundle.yaml`
 
+5.  (Non-OpenShift) Webhook certificates are handled by OCP 4 service CA feature, which is not present in other kubernetes flavors. You will need to generate the certificates in some other way. Makefile for this project provides a useful `certs` command which generates a long lasting certificate for you. TODO explain how to use.
+
 ## Configuration
 
 Now that the operator is deployed, it needs a pool of IPs so they can be allocated to services of type `LoadBalancer`. These pools are defined using `IPGroup` resources. For example:
@@ -64,4 +66,26 @@ In order to migrate from `VirtualIP`, annotate the object like so:
 oc annotate vip <vip-name> -n <namespace> virtualips.paas.org/migrate=""
 ```
 
-The target service type will be converted to `LoadBalancer` and the service itself will be reconciled by the new controller. Once the `VirtualIP` reports `Migrated` state, it can be safely deleted.
+The target service type will be converted to `LoadBalancer` and the service itself will be reconciled by the new controller. The migration process deletes the exposed service clone and then assigns the IP back to the original service, __which results in a momentary disruption__. Once the `VirtualIP` reports `Migrated` state, it can be safely deleted.
+
+## Migrating to `0.3`
+
+Intermediate version `0.3` introduces the new service controller, but still reconciles the `VirtualIP` objects, forbidding creation of new ones in favor of migration. This version also introduces a name change for the namespace as well as the objects which make up the operator. In order to perform the upgrade, do the following:
+
+1.  (Disconnected environment) Transfer the following files to your network:
+    - Operator image (`docker.io/paasteam324/vip-allocator-operator:<version>`)
+    - kube-rbac-proxy image (`gcr.io/kubebuilder/kube-rbac-proxy:v0.5.0`)
+    - YAML manifest (`deploy/bundle.yaml`)
+    - Migration manifest (`deploy/0.3_migration_delete_bundle.yaml`)
+
+2.  (Disconnected environment) Push the relevant images to your disconnected registry and update the `Deployment` object within `deploy/bundle.yaml` with the new image names
+
+3.  Create the namespace for the operator:
+    - OpenShift: `oc new-project vip-allocator-operator`
+    - Kubernetes: `kubectl create namespace vip-allocator-operator`
+
+4.  Use migration bundle to clean-up old operator objects without deleting the custom resources like so: `oc delete -f deploy/0.3_migration_delete_bundle.yaml`. __This action will remove the current operator, meaning the existing objects will not be reconciled until step 5 below is performed.__
+
+5.  Create the new operator manifest: `kubectl create -f deploy/bundle.yaml`. CustomResourceDefinition objects specifically will report `AlreadyExists` error.
+
+6.  TODO non-openshift webhooks need to be updated with CA
