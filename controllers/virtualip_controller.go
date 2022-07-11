@@ -336,6 +336,14 @@ func (r *VirtualIPReconciler) buildKeepalivedClone(virtualIP *paasv1.VirtualIP, 
 	service.Spec.ExternalIPs = []string{virtualIP.Status.IP}
 
 	virtualIP.Status.ClonedService = service.Name
+
+	// remove newer ip finalizer if present
+	// use-case: VirtualIP service is already of type load balancer and
+	// it has already been reconciled by the newer controller
+	if controllerutil.ContainsFinalizer(service, serviceIPFinalizer) {
+		controllerutil.RemoveFinalizer(service, serviceIPFinalizer)
+	}
+
 	return nil
 }
 
