@@ -33,12 +33,19 @@ rules:
   - patch
   - update
 - apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
   - paas.org
   resources:
   - ipgroups
   verbs:
   - get
   - list
+  - watch
 - apiGroups:
   - paas.org
   resources:

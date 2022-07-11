@@ -9,4 +9,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: vip-allocator-operator-sa
-  namespace: system
+  namespace: vip-allocator-operator

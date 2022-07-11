@@ -295,6 +295,34 @@ metadata:
   namespace: vip-allocator-operator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vip-allocator-operator-leader-election-role
+  namespace: vip-allocator-operator
+rules:
+- apiGroups:
+  - ""
+  - coordination.k8s.io
+  resources:
+  - configmaps
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
@@ -384,12 +412,19 @@ rules:
   - patch
   - update
 - apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
   - paas.org
   resources:
   - ipgroups
   verbs:
   - get
   - list
+  - watch
 - apiGroups:
   - paas.org
   resources:
@@ -404,6 +439,20 @@ rules:
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vip-allocator-operator-leader-election-rolebinding
+  namespace: vip-allocator-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: vip-allocator-operator-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: vip-allocator-operator-sa
+  namespace: vip-allocator-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: vip-allocator-operator-manager-role-binding
@@ -414,7 +463,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: vip-allocator-operator-sa
-  namespace: system
+  namespace: vip-allocator-operator
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

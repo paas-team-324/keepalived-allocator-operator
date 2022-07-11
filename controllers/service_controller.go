@@ -45,7 +45,7 @@ type ServiceReconciler struct {
 //+kubebuilder:rbac:groups="",resources=services/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups="",resources=services/finalizers,verbs=update
 
-//+kubebuilder:rbac:groups=paas.org,resources=ipgroups,verbs=get;list
+//+kubebuilder:rbac:groups=paas.org,resources=ipgroups,verbs=get;list;watch
 //+kubebuilder:rbac:groups=paas.org,resources=ips,verbs=get;list;watch;create;update;patch;delete
 
 // global vars
