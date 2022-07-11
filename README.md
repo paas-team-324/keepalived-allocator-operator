@@ -10,6 +10,7 @@ Note that:
 
 - only `iptables` kube-proxy implementation is supported
 - this operator is not compatible with other `LoadBalancer` solutions on the same cluster
+- `nonroot` security context must be allowed for the operator service account
 
 ## Deployment
 
@@ -18,11 +19,11 @@ Note that:
     - kube-rbac-proxy image (`gcr.io/kubebuilder/kube-rbac-proxy:v0.5.0`)
     - YAML manifest (`deploy/bundle.yaml`)
 
-2.  (Disconnected environment) Push the relevant images to your disconnected registry and update the `Deployment` object within `deploy/bundle.yaml` with the new image names
-
-3.  Create the namespace for the operator:
+2.  Create the namespace for the operator:
     - OpenShift: `oc new-project vip-allocator-operator`
     - Kubernetes: `kubectl create namespace vip-allocator-operator`
+
+3.  (Disconnected environment) Push the relevant images to your disconnected registry and update the `Deployment` object within `deploy/bundle.yaml` with the new image names
 
 4.  Create the operator manifest: `kubectl create -f deploy/bundle.yaml`
 
@@ -76,16 +77,22 @@ Intermediate version `0.3` introduces the new service controller, but still reco
     - Operator image (`docker.io/paasteam324/vip-allocator-operator:<version>`)
     - kube-rbac-proxy image (`gcr.io/kubebuilder/kube-rbac-proxy:v0.5.0`)
     - YAML manifest (`deploy/bundle.yaml`)
-    - Migration manifest (`deploy/0.3_migration_delete_bundle.yaml`)
+    - Migration manifest (`deploy/0.3_migration/0.3_migration_delete_bundle.yaml`)
+    - GSM to IPGroup helper script (`deploy/0.3_migration/generate_ipgroups.sh`)
 
-2.  (Disconnected environment) Push the relevant images to your disconnected registry and update the `Deployment` object within `deploy/bundle.yaml` with the new image names
-
-3.  Create the namespace for the operator:
+2.  Create the namespace for the operator:
     - OpenShift: `oc new-project vip-allocator-operator`
     - Kubernetes: `kubectl create namespace vip-allocator-operator`
 
-4.  Use migration bundle to clean-up old operator objects without deleting the custom resources like so: `oc delete -f deploy/0.3_migration_delete_bundle.yaml`. __This action will remove the current operator, meaning the existing objects will not be reconciled until step 5 below is performed.__
+3.  (Disconnected environment) Push the relevant images to your disconnected registry and update the `Deployment` object within `deploy/bundle.yaml` with the new image names
 
-5.  Create the new operator manifest: `kubectl create -f deploy/bundle.yaml`. `CustomResourceDefinition` objects specifically will report `AlreadyExists` error.
+4.  Use migration bundle to clean-up old operator objects without deleting the custom resources like so: `oc delete -f deploy/0.3_migration/0.3_migration_delete_bundle.yaml`. __This action will remove the current operator, meaning the existing objects will not be reconciled until step 5 below is performed.__
 
-6.  (Non-OpenShift) `ValidatingWebhookConfiguration` object will need to be updated with the CA certificate.
+5.  Create the new operator manifest: `kubectl create -f deploy/bundle.yaml`. `CustomResourceDefinition` objects which already exist (specifically `groupsegmentmappings.paas.org`, `ips.paas.org` and `virtualips.paas.org`) will report `AlreadyExists` error which is normal.
+
+6.  Subsequent versions of the operator are using the new `IPGroup` custom resource to allocate IPs to services. Each existing `GroupSegmentMapping` resource will need an `IPGroup` alternative. In order to create these alternatives, you can run the following commands:
+    ```sh
+    ./deploy/0.3_migration/generate_ipgroups.sh | kubectl create -f -
+    ```
+
+7.  (Non-OpenShift) `ValidatingWebhookConfiguration` object will need to be updated with the CA certificate.
