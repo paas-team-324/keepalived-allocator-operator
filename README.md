@@ -26,7 +26,7 @@ Note that:
 
 4.  Create the operator manifest: `kubectl create -f deploy/bundle.yaml`
 
-5.  (Non-OpenShift) Webhook certificates are handled by OCP 4 service CA feature, which is not present in other kubernetes flavors. You will need to generate the certificates in some other way. Makefile for this project provides a useful `certs` command which generates a long lasting certificate for you. TODO explain how to use.
+5.  (Non-OpenShift) Webhook certificates are handled by OCP 4 service CA feature, which is not present in other kubernetes flavors. You will need to generate the certificates in some other way. Makefile for this project provides a useful `certs` command which generates a long lasting certificate for you.
 
 ## Configuration
 
@@ -86,6 +86,6 @@ Intermediate version `0.3` introduces the new service controller, but still reco
 
 4.  Use migration bundle to clean-up old operator objects without deleting the custom resources like so: `oc delete -f deploy/0.3_migration_delete_bundle.yaml`. __This action will remove the current operator, meaning the existing objects will not be reconciled until step 5 below is performed.__
 
-5.  Create the new operator manifest: `kubectl create -f deploy/bundle.yaml`. CustomResourceDefinition objects specifically will report `AlreadyExists` error.
+5.  Create the new operator manifest: `kubectl create -f deploy/bundle.yaml`. `CustomResourceDefinition` objects specifically will report `AlreadyExists` error.
 
-6.  TODO non-openshift webhooks need to be updated with CA
+6.  (Non-OpenShift) `ValidatingWebhookConfiguration` object will need to be updated with the CA certificate.
