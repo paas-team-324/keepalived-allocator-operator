@@ -567,9 +567,9 @@ func (r *VirtualIPReconciler) migrateIP(ctx context.Context, virtualIP *paasv1.V
 	}
 
 	// make sure service is not already of type LoadBalancer
-	// WARN: if this is true, virtualip will not be fully reconciled until migration is complete!
 	if virtualIP.Status.State == paasv1.StateMigratingPreparing {
 
+		// WARN: if this is true, virtualip will not be fully reconciled until migration is complete!
 		if service.Spec.Type == corev1.ServiceTypeLoadBalancer || service.Status.LoadBalancer.Ingress != nil {
 			virtualIP.Status.Message = fmt.Errorf("service is already of type LoadBalancer, change service type to proceed with migration").Error()
 		} else {
