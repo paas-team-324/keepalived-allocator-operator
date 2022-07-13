@@ -90,7 +90,7 @@ Intermediate version `0.3` introduces the new service controller, but still reco
 
 5.  Create the new operator manifest: `kubectl create -f deploy/bundle.yaml`. `CustomResourceDefinition` objects which already exist (specifically `groupsegmentmappings.paas.org`, `ips.paas.org` and `virtualips.paas.org`) will report `AlreadyExists` error which is normal.
 
-6.  Subsequent versions of the operator are using the new `IPGroup` custom resource to allocate IPs to services. Each existing `GroupSegmentMapping` resource will need an `IPGroup` alternative. In order to create these alternatives, you can run the following commands:
+6.  Subsequent versions of the operator are using the new `IPGroup` custom resource to allocate IPs to services. Each existing `GroupSegmentMapping` resource will need an `IPGroup` alternative. In order to create these alternatives, you can use the following helper script:
     ```sh
     ./deploy/0.3_migration/generate_ipgroups.sh | kubectl create -f -
     ```
