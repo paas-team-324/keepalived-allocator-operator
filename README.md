@@ -64,7 +64,7 @@ Before migration:
 
 In order to migrate from `VirtualIP`, annotate the object like so:
 ```sh
-oc annotate vip <vip-name> -n <namespace> virtualips.paas.org/migrate=""
+kubectl annotate vip <vip-name> -n <namespace> virtualips.paas.org/migrate=""
 ```
 
 The target service type will be converted to `LoadBalancer` and the service itself will be reconciled by the new controller. The migration process deletes the exposed service clone and then assigns the IP back to the original service, __which results in a momentary disruption__. Once the `VirtualIP` reports `Migrated` state, it can be safely deleted.
@@ -86,7 +86,7 @@ Intermediate version `0.3` introduces the new service controller, but still reco
 
 3.  (Disconnected environment) Push the relevant images to your disconnected registry and update the `Deployment` object within `deploy/bundle.yaml` with the new image names
 
-4.  Use migration bundle to clean-up old operator objects without deleting the custom resources like so: `oc delete -f deploy/0.3_migration/0.3_migration_delete_bundle.yaml`. __This action will remove the current operator, meaning the existing objects will not be reconciled until step 5 below is performed.__
+4.  Use migration bundle to clean-up old operator objects without deleting the custom resources like so: `kubectl delete -f deploy/0.3_migration/0.3_migration_delete_bundle.yaml`. __This action will remove the current operator, meaning the existing objects will not be reconciled until step 5 below is performed.__
 
 5.  Create the new operator manifest: `kubectl create -f deploy/bundle.yaml`. `CustomResourceDefinition` objects which already exist (specifically `groupsegmentmappings.paas.org`, `ips.paas.org` and `virtualips.paas.org`) will report `AlreadyExists` error which is normal.
 

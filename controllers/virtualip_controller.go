@@ -552,6 +552,14 @@ func (r *VirtualIPReconciler) reconcileService(ctx context.Context, virtualIP *p
 
 func (r *VirtualIPReconciler) migrateIP(ctx context.Context, virtualIP *paasv1.VirtualIP, logger logr.Logger) (ctrl.Result, error) {
 
+	// preparation stage of migration
+	if virtualIP.Status.State == paasv1.StateValid {
+		virtualIP.Status.State = paasv1.StateMigratingPreparing
+		virtualIP.Status.Message = "VirtualIP is being migrated"
+
+		return r.updateStatus(ctx, virtualIP, logger, nil)
+	}
+
 	// get original service from cluster
 	service, err := r.getOriginalService(ctx, virtualIP)
 	if err != nil {
@@ -560,84 +568,104 @@ func (r *VirtualIPReconciler) migrateIP(ctx context.Context, virtualIP *paasv1.V
 
 	// make sure service is not already of type LoadBalancer
 	// WARN: if this is true, virtualip will not be fully reconciled until migration is complete!
-	if service.Spec.Type == corev1.ServiceTypeLoadBalancer && virtualIP.Status.State != paasv1.StateMigrating {
-		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("service is already of type LoadBalancer, change service type to proceed with migration"))
-	}
+	if virtualIP.Status.State == paasv1.StateMigratingPreparing {
 
-	// set state to migrating
-	if virtualIP.Status.State != paasv1.StateMigrating {
-		virtualIP.Status.State = paasv1.StateMigrating
-		virtualIP.Status.Message = "VirtualIP is being migrated"
-
-		return r.updateStatus(ctx, virtualIP, logger, nil)
-	}
-
-	// get ipgroup by ip
-	ipgroup, err := r.getIPGroupByIP(ctx, virtualIP.Status.IP)
-	if err != nil {
-		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not get IPGroup object of IP: %v", err))
-	}
-
-	// get ip object from cluster
-	ip := &paasv1.IP{}
-	err = r.Client.Get(ctx, client.ObjectKey{
-		Name: virtualIP.Status.IP,
-	}, ip)
-	if err != nil {
-		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not get IP object: %v", err))
-	}
-
-	// relabel and reannotate ip object
-	ip.Labels = map[string]string{ipgroupLabel: ipgroup.ObjectMeta.Name}
-	ip.Annotations = map[string]string{
-		ipAnnotationKey: client.ObjectKeyFromObject(service).String(),
-	}
-	if err = r.Client.Update(ctx, ip); err != nil {
-		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not update IP object: %v", err))
-	}
-
-	// remove IP finalizer if present and update
-	if controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
-		controllerutil.RemoveFinalizer(virtualIP, ipFinalizer)
-		if err := r.Update(ctx, virtualIP); err != nil {
-			return r.updateStatus(ctx, virtualIP, logger, err)
+		if service.Spec.Type == corev1.ServiceTypeLoadBalancer { // also check if ip present in status with OR
+			virtualIP.Status.Message = fmt.Errorf("service is already of type LoadBalancer, change service type to proceed with migration").Error()
+		} else {
+			virtualIP.Status.State = paasv1.StateMigratingReassociating
 		}
 
 		return r.updateStatus(ctx, virtualIP, logger, nil)
 	}
 
-	// remove service clone and it's finalizer
-	if controllerutil.ContainsFinalizer(virtualIP, serviceFinalizer) {
-		return r.deleteVIP(ctx, virtualIP, logger)
-	}
+	// reassociate IP object
+	if virtualIP.Status.State == paasv1.StateMigratingReassociating {
 
-	// change service type to LoadBalancer with original IP
-	service.Spec.Type = corev1.ServiceTypeLoadBalancer
-	service.Spec.LoadBalancerIP = virtualIP.Status.IP
-	if err := r.Update(ctx, service); err != nil {
-		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not change service type to LoadBalancer: %v", err))
-	}
-
-	// set ingress IP within the service status to the original IP
-	service.Status.LoadBalancer.Ingress = make([]corev1.LoadBalancerIngress, 1)
-	service.Status.LoadBalancer.Ingress[0].IP = virtualIP.Status.IP
-	if err := r.Status().Update(ctx, service); err != nil {
-		return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not set service ingress IP in status: %v", err))
-	}
-
-	// if specific IP was not originally requested - remove loadBalancerIP field
-	if virtualIP.Spec.IP == "" {
-
-		// get original service
-		service, err := r.getOriginalService(ctx, virtualIP)
+		// get ipgroup by ip
+		ipgroup, err := r.getIPGroupByIP(ctx, virtualIP.Status.IP)
 		if err != nil {
-			return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not get the service to be exposed: %v", err))
+			return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not get IPGroup object of IP: %v", err))
 		}
 
-		service.Spec.LoadBalancerIP = ""
-		if err := r.Update(ctx, service); err != nil {
-			return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not reset the .spec.loadBalancerIP field in service: %v", err))
+		// get ip object from cluster
+		ip := &paasv1.IP{}
+		err = r.Client.Get(ctx, client.ObjectKey{
+			Name: virtualIP.Status.IP,
+		}, ip)
+		if err != nil {
+			return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not get IP object: %v", err))
 		}
+
+		// relabel and reannotate ip object
+		ip.Labels = map[string]string{ipgroupLabel: ipgroup.ObjectMeta.Name}
+		ip.Annotations = map[string]string{
+			ipAnnotationKey: client.ObjectKeyFromObject(service).String(),
+		}
+		if err = r.Client.Update(ctx, ip); err != nil {
+			return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not update IP object: %v", err))
+		}
+
+		virtualIP.Status.State = paasv1.StateMigratingCleaning
+		return r.updateStatus(ctx, virtualIP, logger, nil)
+	}
+
+	// removing old clone and finalizers
+	if virtualIP.Status.State == paasv1.StateMigratingCleaning {
+
+		// remove IP finalizer if present and update
+		if controllerutil.ContainsFinalizer(virtualIP, ipFinalizer) {
+			controllerutil.RemoveFinalizer(virtualIP, ipFinalizer)
+			if err := r.Update(ctx, virtualIP); err != nil {
+				return r.updateStatus(ctx, virtualIP, logger, err)
+			}
+
+			// TODO does this do damage?
+			return r.updateStatus(ctx, virtualIP, logger, nil)
+		}
+
+		// remove service clone and it's finalizer
+		if controllerutil.ContainsFinalizer(virtualIP, serviceFinalizer) {
+			return r.deleteVIP(ctx, virtualIP, logger)
+		}
+
+		virtualIP.Status.State = paasv1.StateMigratingConverting
+		return r.updateStatus(ctx, virtualIP, logger, nil)
+	}
+
+	// converting target service
+	if virtualIP.Status.State == paasv1.StateMigratingConverting {
+
+		// change service type to LoadBalancer with original IP
+		service.Spec.Type = corev1.ServiceTypeLoadBalancer
+		service.Spec.LoadBalancerIP = virtualIP.Status.IP
+		if err := r.Update(ctx, service); err != nil {
+			return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not change service type to LoadBalancer: %v", err))
+		}
+
+		virtualIP.Status.State = paasv1.StateMigratingAssigningIP
+		return r.updateStatus(ctx, virtualIP, logger, nil)
+	}
+
+	// assigning original IP to service
+	if virtualIP.Status.State == paasv1.StateMigratingAssigningIP {
+
+		// set ingress IP within the service status to the original IP
+		service.Status.LoadBalancer.Ingress = make([]corev1.LoadBalancerIngress, 1)
+		service.Status.LoadBalancer.Ingress[0].IP = virtualIP.Status.IP
+		if err := r.Status().Update(ctx, service); err != nil {
+			return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not set service ingress IP in status: %v", err))
+		}
+
+		// if specific IP was not originally requested - remove loadBalancerIP field
+		if virtualIP.Spec.IP == "" {
+
+			service.Spec.LoadBalancerIP = ""
+			if err := r.Update(ctx, service); err != nil {
+				return r.updateStatus(ctx, virtualIP, logger, fmt.Errorf("could not reset the .spec.loadBalancerIP field in service: %v", err))
+			}
+		}
+
 	}
 
 	// set virtualip state as migrated
@@ -673,11 +701,6 @@ func (r *VirtualIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// check if object is terminating
 	if !virtualIP.DeletionTimestamp.IsZero() {
 		return r.deleteVIP(ctx, virtualIP, logger)
-	}
-
-	// do not reconcile migrated services
-	if virtualIP.Status.State == paasv1.StateMigrated {
-		return ctrl.Result{}, nil
 	}
 
 	// check for migration annotation

@@ -40,12 +40,16 @@ type VirtualIPSpec struct {
 type VirtualIPState string
 
 const (
-	StateValid      VirtualIPState = "Valid"
-	StateError      VirtualIPState = "Error"
-	StateCreatingIP VirtualIPState = "Creating IP object"
-	StateExposing   VirtualIPState = "Exposing service"
-	StateMigrating  VirtualIPState = "Migrating"
-	StateMigrated   VirtualIPState = "Migrated"
+	StateValid                  VirtualIPState = "Valid"
+	StateError                  VirtualIPState = "Error"
+	StateCreatingIP             VirtualIPState = "Creating IP object"
+	StateExposing               VirtualIPState = "Exposing service"
+	StateMigratingPreparing     VirtualIPState = "Migrating: preparing for migration"
+	StateMigratingReassociating VirtualIPState = "Migrating: reassociating IP object"
+	StateMigratingCleaning      VirtualIPState = "Migrating: cleaning up"
+	StateMigratingConverting    VirtualIPState = "Migrating: converting service"
+	StateMigratingAssigningIP   VirtualIPState = "Migrating: assigning original IP"
+	StateMigrated               VirtualIPState = "Migrated"
 )
 
 const MigrationAnnotation = "virtualips.paas.org/migrate"

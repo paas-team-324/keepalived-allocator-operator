@@ -61,12 +61,17 @@ func (r *VirtualIP) ValidateUpdate(old runtime.Object) error {
 		_, migrationAnnotationPresentOld = oldVip.ObjectMeta.Annotations[MigrationAnnotation]
 	}
 	if r.ObjectMeta.Annotations != nil {
-		_, migrationAnnotationPresentNew = oldVip.ObjectMeta.Annotations[MigrationAnnotation]
+		_, migrationAnnotationPresentNew = r.ObjectMeta.Annotations[MigrationAnnotation]
 	}
 
 	// forbid backing out of migration
 	if migrationAnnotationPresentOld && !migrationAnnotationPresentNew {
 		return fmt.Errorf("VirtualIP migration can not be stopped")
+	}
+
+	// forbid migration of non-valid service
+	if !migrationAnnotationPresentOld && migrationAnnotationPresentNew && r.Status.State != StateValid {
+		return fmt.Errorf("not valid VirtualIP can not be migrated")
 	}
 
 	// forbid service change during migration
