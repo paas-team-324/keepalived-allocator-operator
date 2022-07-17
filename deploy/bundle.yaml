@@ -83,8 +83,8 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .metadata.labels.gsm
-      name: GroupSegmentMapping
+    - jsonPath: .metadata.labels.ipgroup
+      name: IPGroup
       type: string
     - jsonPath: .metadata.annotations.virtualips\.paas\.il/owner
       name: Owner
