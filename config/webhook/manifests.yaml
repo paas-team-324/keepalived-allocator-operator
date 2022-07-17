@@ -27,23 +27,3 @@ webhooks:
     resources:
     - ips
   sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
-      path: /validate-paas-org-v1-virtualip
-  failurePolicy: Fail
-  name: vvirtualip.kb.io
-  rules:
-  - apiGroups:
-    - paas.org
-    apiVersions:
-    - v1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - virtualips
-  sideEffects: None

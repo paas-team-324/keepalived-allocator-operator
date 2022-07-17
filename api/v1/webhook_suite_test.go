@@ -103,9 +103,6 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	err = (&VirtualIP{}).SetupWebhookWithManager(mgr)
-	Expect(err).NotTo(HaveOccurred())
-
 	// err = (&IP{}).SetupWebhookWithManager(mgr)
 	// Expect(err).NotTo(HaveOccurred())
 

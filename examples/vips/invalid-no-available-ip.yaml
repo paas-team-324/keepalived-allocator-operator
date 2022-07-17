@@ -1,6 +1,0 @@
-apiVersion: paas.org/v1
-kind: VirtualIP
-metadata:
-  name: invalid-no-available-ip
-spec:
-  service: invalid-no-available-ip-service

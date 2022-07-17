@@ -1,6 +1,0 @@
-apiVersion: paas.org/v1
-kind: VirtualIP
-metadata:
-  name: invalid-fake-service
-spec:
-  service: invalid-fake-service-service

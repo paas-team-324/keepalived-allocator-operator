@@ -1,9 +1,0 @@
-apiVersion: paas.org/v1
-kind: GroupSegmentMapping
-metadata:
-  name: groupsegmentmapping-sample
-spec:
-  keepalivedGroup: "group1"
-  segment: "1.1.1.0/30"
-  excludedIPs:
-  - "1.1.1.0"

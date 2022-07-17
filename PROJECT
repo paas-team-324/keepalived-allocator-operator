@@ -11,16 +11,6 @@ resources:
     crdVersion: v1
   domain: org
   group: paas
-  kind: VirtualIP
-  path: github.com/paas-team-324/vip-allocator-operator/api/v1
-  version: v1
-  webhooks:
-    validation: true
-    webhookVersion: v1
-- api:
-    crdVersion: v1
-  domain: org
-  group: paas
   kind: IP
   path: github.com/paas-team-324/vip-allocator-operator/api/v1
   version: v1
@@ -29,14 +19,6 @@ resources:
     webhookVersion: v1
 - api:
     crdVersion: v1
-  domain: org
-  group: paas
-  kind: GroupSegmentMapping
-  path: github.com/paas-team-324/vip-allocator-operator/api/v1
-  version: v1
-- api:
-    crdVersion: v1
-    namespaced: true
   domain: org
   group: paas
   kind: IPGroup

@@ -9,4 +9,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: docker.io/paasteam324/vip-allocator-operator
-  newTag: "0.3"
+  newTag: "1.0"
