@@ -10,8 +10,3 @@ webhooks:
     service:
       name: vip-allocator-operator-webhook
   name: vip.kb.io
-- clientConfig:
-    caBundle: ""
-    service:
-      name: vip-allocator-operator-webhook
-  name: vvirtualip.kb.io

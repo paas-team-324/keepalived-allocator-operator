@@ -370,9 +370,3 @@ webhooks:
     resources:
     - ips
   sideEffects: None
-- clientConfig:
-    caBundle: ""
-    service:
-      name: vip-allocator-operator-webhook
-      namespace: vip-allocator-operator
-  name: vvirtualip.kb.io
