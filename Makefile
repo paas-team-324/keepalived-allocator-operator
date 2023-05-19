@@ -1,5 +1,5 @@
 # Current Operator version
-VERSION ?= 0.0.1
+VERSION ?= 0.3
 # Default bundle image tag
 BUNDLE_IMG ?= controller-bundle:$(VERSION)
 # Options for 'bundle-build'
@@ -12,7 +12,7 @@ endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 # Image URL to use all building/pushing image targets
-IMG ?= docker.io/paasteam324/keepalived-allocator-operator:${VERSION}
+IMG ?= docker.io/paasteam324/vip-allocator-operator:${VERSION}
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 
@@ -24,7 +24,7 @@ GOBIN=$(shell go env GOBIN)
 endif
 
 # self signed cert variable
-NAMESPACE ?= keepalived-operator
+NAMESPACE ?= vip-allocator-operator
 define WEBHOOK_CERT_REQ
 [req]
 distinguished_name = webhooks
@@ -38,7 +38,7 @@ ST = VA
 L = SomeCity
 O = MyCompany
 OU = MyDivision
-CN = keepalived-allocator-operator-webhook.$(NAMESPACE).svc
+CN = vip-allocator-operator-webhook.$(NAMESPACE).svc
 
 [v3_req]
 keyUsage = keyEncipherment, dataEncipherment
@@ -46,7 +46,7 @@ extendedKeyUsage = serverAuth
 subjectAltName = @alt_names
 
 [alt_names]
-DNS.1 = keepalived-allocator-operator-webhook.$(NAMESPACE).svc
+DNS.1 = vip-allocator-operator-webhook.$(NAMESPACE).svc
 endef
 export WEBHOOK_CERT_REQ
 
@@ -113,6 +113,9 @@ docker-build:
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+
+# Build and push in one go
+build-push: docker-build docker-push
 
 # Download controller-gen locally if necessary
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen

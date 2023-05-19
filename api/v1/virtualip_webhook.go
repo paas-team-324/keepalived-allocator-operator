@@ -45,11 +45,7 @@ var _ webhook.Validator = &VirtualIP{}
 func (r *VirtualIP) ValidateCreate() error {
 	virtualiplog.Info("validate create", "name", r.Name)
 
-	// the cloned service will be r.Name + '-keepalived-clone' so we must make sure that len(r.Name) + 17 < 64
-	if len(r.Name) > 46 {
-		return fmt.Errorf("the virtualip's name cannot be more than 46 chars")
-	}
-	return nil
+	return fmt.Errorf("VirtualIP resource is deprecated, use a service with type LoadBalancer instead")
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
@@ -57,9 +53,37 @@ func (r *VirtualIP) ValidateUpdate(old runtime.Object) error {
 	virtualiplog.Info("validate update", "name", r.Name)
 
 	oldVip := old.(*VirtualIP)
+
+	// check for migration annotation in both iterations
+	migrationAnnotationPresentOld := false
+	migrationAnnotationPresentNew := false
+	if oldVip.ObjectMeta.Annotations != nil {
+		_, migrationAnnotationPresentOld = oldVip.ObjectMeta.Annotations[MigrationAnnotation]
+	}
+	if r.ObjectMeta.Annotations != nil {
+		_, migrationAnnotationPresentNew = r.ObjectMeta.Annotations[MigrationAnnotation]
+	}
+
+	// forbid backing out of migration
+	if migrationAnnotationPresentOld && !migrationAnnotationPresentNew {
+		return fmt.Errorf("VirtualIP migration can not be stopped")
+	}
+
+	// forbid migration of non-valid service
+	if !migrationAnnotationPresentOld && migrationAnnotationPresentNew && r.Status.State != StateValid {
+		return fmt.Errorf("not valid VirtualIP can not be migrated")
+	}
+
+	// forbid service change during migration
+	if migrationAnnotationPresentOld && r.Spec.Service != oldVip.Spec.Service {
+		return fmt.Errorf("can not change service once migration has begun")
+	}
+
+	// ensure .spec.ip immutability
 	if r.Spec.IP != oldVip.Spec.IP {
 		return fmt.Errorf(".spec.ip is immutable")
 	}
+
 	return nil
 }
 

@@ -81,6 +81,74 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
+  name: ipgroups.paas.org
+spec:
+  group: paas.org
+  names:
+    kind: IPGroup
+    listKind: IPGroupList
+    plural: ipgroups
+    shortNames:
+    - ipg
+    singular: ipgroup
+  scope: Cluster
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.segment
+      name: Segment
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: IPGroup is the Schema for the ipgroups API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: IPGroupSpec defines the desired state of IPGroup
+            properties:
+              excludedIPs:
+                description: Exclude the following IPs from the specified segment
+                items:
+                  type: string
+                type: array
+              segment:
+                description: Segment in which to allocate the IP address
+                type: string
+            required:
+            - excludedIPs
+            - segment
+            type: object
+          status:
+            description: IPGroupStatus defines the observed state of IPGroup
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.1
+  creationTimestamp: null
   name: ips.paas.org
 spec:
   group: paas.org
@@ -223,8 +291,36 @@ status:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: keepalived-allocator-operator-sa
-  namespace: keepalived-operator
+  name: vip-allocator-operator-sa
+  namespace: vip-allocator-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vip-allocator-operator-leader-election-role
+  namespace: vip-allocator-operator
+rules:
+- apiGroups:
+  - ""
+  - coordination.k8s.io
+  resources:
+  - configmaps
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -234,7 +330,7 @@ metadata:
     rbac.authorization.k8s.io/aggregate-to-cluster-reader: "true"
     rbac.authorization.k8s.io/aggregate-to-edit: "true"
     rbac.authorization.k8s.io/aggregate-to-view: "true"
-  name: keepalived-allocator-operator-aggregate-gsms-view
+  name: vip-allocator-operator-aggregate-gsms-view
 rules:
 - apiGroups:
   - paas.org
@@ -251,7 +347,7 @@ metadata:
   labels:
     rbac.authorization.k8s.io/aggregate-to-admin: "true"
     rbac.authorization.k8s.io/aggregate-to-edit: "true"
-  name: keepalived-allocator-operator-aggregate-virtualips-admin-edit
+  name: vip-allocator-operator-aggregate-virtualips-admin-edit
 rules:
 - apiGroups:
   - paas.org
@@ -272,7 +368,7 @@ metadata:
   labels:
     rbac.authorization.k8s.io/aggregate-to-cluster-reader: "true"
     rbac.authorization.k8s.io/aggregate-to-view: "true"
-  name: keepalived-allocator-operator-aggregate-virtualips-view
+  name: vip-allocator-operator-aggregate-virtualips-view
 rules:
 - apiGroups:
   - paas.org
@@ -284,64 +380,150 @@ rules:
   - watch
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: vip-allocator-operator-manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - services/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - paas.org
+  resources:
+  - ipgroups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - paas.org
+  resources:
+  - ips
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vip-allocator-operator-leader-election-rolebinding
+  namespace: vip-allocator-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: vip-allocator-operator-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: vip-allocator-operator-sa
+  namespace: vip-allocator-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: keepalived-allocator-operator-manager-rolebinding
+  name: vip-allocator-operator-manager-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vip-allocator-operator-manager-role
+subjects:
+- kind: ServiceAccount
+  name: vip-allocator-operator-sa
+  namespace: vip-allocator-operator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vip-allocator-operator-manager-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-admin
 subjects:
 - kind: ServiceAccount
-  name: keepalived-allocator-operator-sa
-  namespace: keepalived-operator
+  name: vip-allocator-operator-sa
+  namespace: vip-allocator-operator
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    control-plane: keepalived-allocator-operator-controller-manager
-  name: keepalived-allocator-operator-controller-manager-metrics
-  namespace: keepalived-operator
+    control-plane: vip-allocator-operator-controller-manager
+  name: vip-allocator-operator-controller-manager-metrics
+  namespace: vip-allocator-operator
 spec:
   ports:
   - name: https
     port: 8443
     targetPort: https
   selector:
-    control-plane: keepalived-allocator-operator-controller-manager
+    control-plane: vip-allocator-operator-controller-manager
 ---
 apiVersion: v1
 kind: Service
 metadata:
   annotations:
-    service.beta.openshift.io/serving-cert-secret-name: keepalived-allocator-operator-webhook-server-cert
-  name: keepalived-allocator-operator-webhook
-  namespace: keepalived-operator
+    service.beta.openshift.io/serving-cert-secret-name: vip-allocator-operator-webhook-server-cert
+  name: vip-allocator-operator-webhook
+  namespace: vip-allocator-operator
 spec:
   ports:
   - port: 443
     protocol: TCP
     targetPort: 9443
   selector:
-    control-plane: keepalived-allocator-operator-controller-manager
+    control-plane: vip-allocator-operator-controller-manager
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    control-plane: keepalived-allocator-operator-controller-manager
-  name: keepalived-allocator-operator-controller-manager
-  namespace: keepalived-operator
+    control-plane: vip-allocator-operator-controller-manager
+  name: vip-allocator-operator-controller-manager
+  namespace: vip-allocator-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      control-plane: keepalived-allocator-operator-controller-manager
+      control-plane: vip-allocator-operator-controller-manager
   template:
     metadata:
       labels:
-        control-plane: keepalived-allocator-operator-controller-manager
+        control-plane: vip-allocator-operator-controller-manager
     spec:
       containers:
       - args:
@@ -360,10 +542,7 @@ spec:
         - --leader-elect
         command:
         - /manager
-        env:
-        - name: ILLEGAL_PORTS
-          value: '[10250, 111]'
-        image: docker.io/paasteam324/keepalived-allocator-operator:0.0.6
+        image: docker.io/paasteam324/vip-allocator-operator:0.3
         livenessProbe:
           httpGet:
             path: /healthz
@@ -389,28 +568,28 @@ spec:
           readOnly: true
       securityContext:
         runAsUser: 65532
-      serviceAccountName: keepalived-allocator-operator-sa
+      serviceAccountName: vip-allocator-operator-sa
       terminationGracePeriodSeconds: 10
       volumes:
       - name: cert
         secret:
           defaultMode: 420
-          secretName: keepalived-allocator-operator-webhook-server-cert
+          secretName: vip-allocator-operator-webhook-server-cert
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   annotations:
     service.beta.openshift.io/inject-cabundle: "true"
-  name: keepalived-allocator-operator-validating-webhook-configuration
+  name: vip-allocator-operator-validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
   - v1
   clientConfig:
     caBundle: ""
     service:
-      name: keepalived-allocator-operator-webhook
-      namespace: keepalived-operator
+      name: vip-allocator-operator-webhook
+      namespace: vip-allocator-operator
       path: /validate-paas-org-v1-ip
   failurePolicy: Fail
   name: vip.kb.io
@@ -431,8 +610,8 @@ webhooks:
   clientConfig:
     caBundle: ""
     service:
-      name: keepalived-allocator-operator-webhook
-      namespace: keepalived-operator
+      name: vip-allocator-operator-webhook
+      namespace: vip-allocator-operator
       path: /validate-paas-org-v1-virtualip
   failurePolicy: Fail
   name: vvirtualip.kb.io

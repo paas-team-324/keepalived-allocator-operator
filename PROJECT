@@ -5,14 +5,14 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: empty
-repo: github.com/paas-team-324/keepalived-allocator-operator
+repo: github.com/paas-team-324/vip-allocator-operator
 resources:
 - api:
     crdVersion: v1
   domain: org
   group: paas
   kind: VirtualIP
-  path: github.com/paas-team-324/keepalived-allocator-operator/api/v1
+  path: github.com/paas-team-324/vip-allocator-operator/api/v1
   version: v1
   webhooks:
     validation: true
@@ -22,7 +22,7 @@ resources:
   domain: org
   group: paas
   kind: IP
-  path: github.com/paas-team-324/keepalived-allocator-operator/api/v1
+  path: github.com/paas-team-324/vip-allocator-operator/api/v1
   version: v1
   webhooks:
     validation: true
@@ -32,6 +32,18 @@ resources:
   domain: org
   group: paas
   kind: GroupSegmentMapping
-  path: github.com/paas-team-324/keepalived-allocator-operator/api/v1
+  path: github.com/paas-team-324/vip-allocator-operator/api/v1
+  version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: org
+  group: paas
+  kind: IPGroup
+  path: github.com/paas-team-324/vip-allocator-operator/api/v1
+  version: v1
+- controller: true
+  domain: ""
+  kind: Service
   version: v1
 version: "3"

@@ -38,6 +38,8 @@ var iplog = logf.Log.WithName("ip-resource")
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
 //+kubebuilder:webhook:path=/validate-paas-org-v1-ip,mutating=false,failurePolicy=fail,sideEffects=None,groups=paas.org,resources=ips,verbs=create;update;delete,versions=v1,name=vip.kb.io,admissionReviewVersions=v1
 
+//+kubebuilder:rbac:groups=authentication.k8s.io,resources=tokenreviews,verbs=create
+
 func getControllerServiceAccount() string {
 	myConfig, err := rest.InClusterConfig()
 	if err != nil {

@@ -1,4 +1,4 @@
-module github.com/paas-team-324/keepalived-allocator-operator
+module github.com/paas-team-324/vip-allocator-operator
 
 go 1.15
 

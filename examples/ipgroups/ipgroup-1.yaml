@@ -1,0 +1,10 @@
+apiVersion: paas.org/v1
+kind: IPGroup
+metadata:
+  name: ipgroup-1
+spec:
+  segment: "1.1.1.0/29"
+  excludedIPs:
+  - "1.1.1.0"
+  - "1.1.1.2"
+  - "1.1.1.7"

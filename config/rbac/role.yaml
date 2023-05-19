@@ -7,9 +7,9 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - paas.org
+  - ""
   resources:
-  - virtualips
+  - services
   verbs:
   - create
   - delete
@@ -19,16 +19,42 @@ rules:
   - update
   - watch
 - apiGroups:
-  - paas.org
+  - ""
   resources:
-  - virtualips/finalizers
+  - services/finalizers
   verbs:
   - update
 - apiGroups:
-  - paas.org
+  - ""
   resources:
-  - virtualips/status
+  - services/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - paas.org
+  resources:
+  - ipgroups
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - paas.org
+  resources:
+  - ips
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

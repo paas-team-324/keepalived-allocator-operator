@@ -9,16 +9,16 @@ metadata:
   name: controller-manager
   namespace: system
   labels:
-    control-plane: keepalived-allocator-operator-controller-manager
+    control-plane: vip-allocator-operator-controller-manager
 spec:
   selector:
     matchLabels:
-      control-plane: keepalived-allocator-operator-controller-manager
+      control-plane: vip-allocator-operator-controller-manager
   replicas: 1
   template:
     metadata:
       labels:
-        control-plane: keepalived-allocator-operator-controller-manager
+        control-plane: vip-allocator-operator-controller-manager
     spec:
       securityContext:
         runAsUser: 65532
@@ -27,9 +27,6 @@ spec:
         - /manager
         args:
         - --leader-elect
-        env:
-        - name: ILLEGAL_PORTS
-          value: '[10250, 111]'
         image: controller:latest
         name: manager
         securityContext:
@@ -47,4 +44,4 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
       terminationGracePeriodSeconds: 10
-      serviceAccountName: keepalived-allocator-operator-sa
+      serviceAccountName: vip-allocator-operator-sa

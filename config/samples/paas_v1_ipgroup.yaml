@@ -1,0 +1,6 @@
+apiVersion: paas.org/v1
+kind: IPGroup
+metadata:
+  name: ipgroup-sample
+spec:
+  # Add fields here
