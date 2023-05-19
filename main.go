@@ -92,18 +92,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.VirtualIPReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("VirtualIP"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "VirtualIP")
-		os.Exit(1)
-	}
-	if err = (&paasv1.VirtualIP{}).SetupWebhookWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "VirtualIP")
-		os.Exit(1)
-	}
 	mgr.GetWebhookServer().Register("/validate-paas-org-v1-ip", &webhook.Admission{Handler: &paasv1.IPValidationHandler{}})
 
 	if err = (&controllers.ServiceReconciler{

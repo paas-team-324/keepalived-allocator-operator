@@ -1,7 +1,5 @@
 ## Append samples you want in your CSV to this file as resources ##
 resources:
-- paas_v1_virtualip.yaml
 - paas_v1_ip.yaml
-- paas_v1_groupsegmentmapping.yaml
 - paas_v1_ipgroup.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

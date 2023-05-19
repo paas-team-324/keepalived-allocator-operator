@@ -51,6 +51,28 @@ type ServiceReconciler struct {
 // global vars
 const ipgroupLabel = "ipgroup"
 const serviceIPFinalizer = "ips.paas.org/finalizer"
+const ipAnnotationKey = "virtualips.paas.il/owner"
+
+// general functions
+func incrementIP(ip net.IP) {
+	for j := len(ip) - 1; j >= 0; j-- {
+		if ip[j] == 255 {
+			ip[j] = 0
+		} else {
+			ip[j]++
+			break
+		}
+	}
+}
+
+func containsString(arr []string, str string) bool {
+	for _, item := range arr {
+		if item == str {
+			return true
+		}
+	}
+	return false
+}
 
 func (r *ServiceReconciler) patchIP(ipObject *paasv1.IP, service *corev1.Service, ipgroupName string) {
 	// set appropriate labels and annotations

@@ -1,7 +1,0 @@
-apiVersion: paas.org/v1
-kind: VirtualIP
-metadata:
-  name: invalid-no-gsm-for-ip
-spec:
-  service: invalid-no-gsm-for-ip-service
-  ip: 1.1.2.40
